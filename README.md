@@ -12,11 +12,11 @@ Minimal, embedded-optimized implementation of **CCSDS Space Wire Protocol** comb
 
 ### Core Protocol Implementation
 
-- ✅ **Character Codec**: 9-bit character encoding with parity support
-- ✅ **Frame Layer**: Space Wire frame structure with CRC-16-CCITT
-- ✅ **Router**: Packet routing with virtual channel support
-- ✅ **Link Layer**: Link state management and flow control
-- ✅ **CCSDS Integration**: Combined Space Wire + Space Packet transmission
+- **Character Codec**: 9-bit character encoding with parity support
+- **Frame Layer**: Space Wire frame structure with CRC-16-CCITT
+- **Router**: Packet routing with virtual channel support
+- **Link Layer**: Link state management and flow control
+- **CCSDS Integration**: Combined Space Wire + Space Packet transmission
 
 ### Design Principles
 
@@ -215,12 +215,12 @@ size_t sw_packet_create(uint8_t device_addr, uint8_t target_addr, uint16_t apid,
 
 Current implementation focuses on core protocol features:
 
-- ✅ Single-destination routing (no path routing)
-- ✅ Flow control (basic credit-based)
-- ✅ CRC validation
-- ⚠️ No automatic retransmission handling
-- ⚠️ No bandwidth management
-- ⚠️ No advanced QoS features
+- Single-destination routing (no path routing)
+- Flow control (basic credit-based)
+- CRC validation
+- No automatic retransmission handling
+- No bandwidth management
+- No advanced QoS features
 
 These can be extended as needed for specific mission requirements.
 

@@ -247,17 +247,17 @@ Virtual Channels:
 ## Limitations and Extensions
 
 ### Current Design
-- ✅ Single-hop routing only
-- ✅ Basic flow control (credit-based)
-- ✅ CRC error detection
-- ✅ Virtual channel support
 
 ### Not Implemented
-- ❌ Multi-hop path routing
-- ❌ Automatic retransmission
-- ❌ Bandwidth management
-- ❌ Priority queuing
-- ❌ Advanced QoS features
+- Single-hop routing only
+- Basic flow control (credit-based)
+- CRC error detection
+- Virtual channel support
+- Multi-hop path routing
+- Automatic retransmission
+- Bandwidth management
+- Priority queuing
+- Advanced QoS features
 
 These can be added without modifying core protocol implementation.
 
