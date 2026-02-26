@@ -58,6 +58,8 @@ dkms.conf
 examples/spacepacket_example
 tests/ctest
 build/
+spacewire_example
+spacewire_tests
 
 # Editor configs
 .vscode/

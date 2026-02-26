@@ -69,7 +69,7 @@ uint8_t sw_encode_char(uint8_t data, uint8_t *byte);
 typedef struct {
   uint8_t target_addr;     /* Target logical address (0-254) */
   uint8_t protocol_id;     /* Protocol identifier (1=CCSDS, 2=Raw) */
-  const uint8_t *payload;
+  uint8_t *payload;        /* Non-const: decode path must pass to sp_packet_parse(uint8_t *) */
   uint16_t payload_len;
 } sw_frame_t;
 

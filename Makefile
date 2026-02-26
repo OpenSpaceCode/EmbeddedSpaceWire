@@ -1,6 +1,11 @@
-CC := gcc
-CFLAGS := -Wall -Wextra -pedantic -std=c99 -O2 -fPIC
-CFLAGS += -I./include -I./external/EmbeddedSpacePacket/include
+CC ?= cc
+# Stronger warnings for code quality
+CFLAGS ?= -O2 -Iinclude -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
+		  -Wcast-align -Wcast-qual -Wpointer-arith -Wformat=2 \
+		  -Wmissing-prototypes -Wstrict-prototypes -Wredundant-decls -Wundef \
+		  -std=c11
+AR ?= ar
+CFLAGS += -I./external/EmbeddedSpacePacket/include -fPIC
 
 # Source files
 CORE_SRCS := src/spacewire_codec.c \
@@ -33,7 +38,7 @@ all: lib example
 lib: $(LIB_STATIC) $(LIB_SHARED)
 
 $(LIB_STATIC): $(CORE_OBJS) $(ESP_OBJS)
-	ar rcs $@ $^
+	$(AR) rcs $@ $^
 
 $(LIB_SHARED): $(CORE_OBJS) $(ESP_OBJS)
 	$(CC) -shared -o $@ $^

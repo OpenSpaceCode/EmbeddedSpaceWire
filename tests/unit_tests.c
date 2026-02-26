@@ -20,7 +20,7 @@
  * CHARACTER CODEC TESTS
  * ============================================================================ */
 
-int test_encode_decode(void) {
+static int test_encode_decode(void) {
   printf("Test: Character Encode/Decode\n");
 
   for (int i = 4; i < 256; i++) {  /* Skip control codes 0-3 */
@@ -38,7 +38,7 @@ int test_encode_decode(void) {
   return 1;
 }
 
-int test_parity_error(void) {
+static int test_parity_error(void) {
   printf("Test: Parity Error Detection\n");
 
   uint8_t encoded;
@@ -53,7 +53,7 @@ int test_parity_error(void) {
   return 1;
 }
 
-int test_crc_computation(void) {
+static int test_crc_computation(void) {
   printf("Test: CRC-16-CCITT Computation\n");
 
   /* Test vector: "123456789" */
@@ -75,7 +75,7 @@ int test_crc_computation(void) {
  * FRAME LAYER TESTS
  * ============================================================================ */
 
-int test_frame_encode_decode(void) {
+static int test_frame_encode_decode(void) {
   printf("Test: Frame Encode/Decode\n");
 
   uint8_t payload[] = {0x01, 0x02, 0x03, 0x04, 0x05};
@@ -103,7 +103,7 @@ int test_frame_encode_decode(void) {
   return 1;
 }
 
-int test_frame_crc_validation(void) {
+static int test_frame_crc_validation(void) {
   printf("Test: Frame CRC Validation\n");
 
   uint8_t payload[] = {0xAA, 0xBB};
@@ -128,7 +128,7 @@ int test_frame_crc_validation(void) {
   return 1;
 }
 
-int test_frame_size_calculation(void) {
+static int test_frame_size_calculation(void) {
   printf("Test: Frame Size Calculation\n");
 
   sw_frame_t frame;
@@ -150,7 +150,7 @@ int test_frame_size_calculation(void) {
  * ROUTER TESTS
  * ============================================================================ */
 
-int test_router_initialization(void) {
+static int test_router_initialization(void) {
   printf("Test: Router Initialization\n");
 
   sw_router_t router;
@@ -165,7 +165,7 @@ int test_router_initialization(void) {
   return 1;
 }
 
-int test_router_routing(void) {
+static int test_router_routing(void) {
   printf("Test: Router Routing Logic\n");
 
   sw_router_t router;
@@ -201,7 +201,7 @@ int test_router_routing(void) {
  * PACKET INTEGRATION TESTS
  * ============================================================================ */
 
-int test_packet_encode_decode(void) {
+static int test_packet_encode_decode(void) {
   printf("Test: CCSDS Packet + Space Wire Integration\n");
 
   sw_packet_config_t config = {
@@ -217,7 +217,7 @@ int test_packet_encode_decode(void) {
   pf.packet.ph.apid = 0x0100;
   const char *payload_str = "Test payload";
   pf.packet.payload = (const uint8_t *)payload_str;
-  pf.packet.payload_len = strlen(payload_str);
+  pf.packet.payload_len = (uint16_t)strlen(payload_str);
 
   uint8_t buf[512];
   size_t encoded_size = sw_packet_encode(&pf, buf, sizeof(buf));
@@ -234,7 +234,7 @@ int test_packet_encode_decode(void) {
   return 1;
 }
 
-int test_packet_create_convenience(void) {
+static int test_packet_create_convenience(void) {
   printf("Test: Packet Creation Convenience Function\n");
 
   uint8_t payload[] = {0x11, 0x22, 0x33};
