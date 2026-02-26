@@ -43,7 +43,7 @@ EmbeddedSpaceWire/
 ├── examples/
 │   └── main.c               # Example usage
 ├── tests/
-│   └── unit_tests.c         # Unit tests
+│   └── unit_tests.cpp       # Unit tests (Google Test)
 ├── Makefile
 └── README.md
 ```
@@ -71,6 +71,14 @@ make example
 ```
 
 ### Run Tests
+
+Requires `libgtest-dev` and `g++`. The helper script installs them automatically:
+
+```bash
+./run_tests.sh
+```
+
+Or, if the dependencies are already installed:
 
 ```bash
 make test

@@ -8,7 +8,10 @@ make all
 # run an example
 ./spacewire_example
 
-# run tests
+# run tests (installs libgtest-dev automatically if missing)
+./run_tests.sh
+
+# or, if dependencies are already installed
 make test
 
 # clean
@@ -189,10 +192,12 @@ Output shows:
 
 ### Run Tests
 ```bash
-make test
+./run_tests.sh
 ```
 
-All 10 tests should pass:
+The script installs `libgtest-dev` and `g++` via `apt` if they are not already present, initialises the `EmbeddedSpacePacket` submodule, and runs `make test`.
+
+All 11 tests should pass:
 - Character codec (encode/decode, parity, error detection)
 - Frame layer (encode/decode, CRC validation, size calculation)
 - Router (initialization, routing logic)
@@ -273,7 +278,7 @@ void sw_reset_statistics(void);
 1. Read [ARCHITECTURE.md](ARCHITECTURE.md) for detailed protocol info
 2. Check [README.md](README.md) for standards references
 3. Review examples in `examples/main.c`
-4. Look at tests in `tests/unit_tests.c`
+4. Look at tests in `tests/unit_tests.cpp`
 5. Integrate with your physical link layer
 
 ## Support
