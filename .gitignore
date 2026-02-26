@@ -63,3 +63,8 @@ build/
 .vscode/
 .idea/
 
+_codeql_detected_source_root
+spacewire_example
+spacewire_tests
+libspacewire.a
+libspacewire.so
