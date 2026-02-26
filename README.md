@@ -190,20 +190,6 @@ size_t sw_packet_create(uint8_t device_addr, uint8_t target_addr, uint16_t apid,
                         uint8_t *buf, size_t buf_len);
 ```
 
-## Protocol Stack
-
-```
-┌─────────────────────────────────────┐
-│   CCSDS Space Packet (6+ bytes)     │  Primary/Secondary headers + payload
-├─────────────────────────────────────┤
-│   Space Wire Frame (4+ bytes)       │  Address, Protocol ID, CRC
-├─────────────────────────────────────┤
-│   Character Codec (9-bit)           │  Parity encoding
-├─────────────────────────────────────┤
-│   Physical Link (serial, fiber)     │  Bit transmission
-└─────────────────────────────────────┘
-```
-
 ## Memory Usage (Estimated)
 
 - **Library (stripped)**: ~4-5 KB
