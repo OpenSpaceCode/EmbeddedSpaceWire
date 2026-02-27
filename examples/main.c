@@ -80,7 +80,7 @@ int main(void) {
   pf.packet.ph.seq_count = 1;
   const char *msg = "Hello Space Wire";
   pf.packet.payload = (const uint8_t *)msg;
-  pf.packet.payload_len = strlen(msg);
+  pf.packet.payload_len = (uint16_t)strlen(msg);
 
   uint8_t pkt_buf[512];
   size_t pkt_size = sw_packet_encode(&pf, pkt_buf, sizeof(pkt_buf));

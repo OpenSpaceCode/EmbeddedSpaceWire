@@ -58,7 +58,7 @@ size_t sw_packet_encode(const sw_packet_frame_t *pf, uint8_t *buf, size_t buf_le
   size_t frame_size = sw_frame_encode(&frame, buf, buf_len);
   if (frame_size > 0) {
     g_sw_stats.packets_sent++;
-    g_sw_stats.bytes_sent += frame_size;
+    g_sw_stats.bytes_sent += (uint32_t)frame_size;
   }
 
   return frame_size;
@@ -77,14 +77,14 @@ int sw_packet_decode(sw_packet_frame_t *pf, uint8_t *buf, size_t buf_len) {
     return 0;
 
   /* Then, parse the CCSDS packet from frame payload */
-  uint8_t *payload_buf = (uint8_t *)pf->frame.payload;
+  uint8_t *payload_buf = pf->frame.payload;
   size_t payload_len = pf->frame.payload_len;
 
   if (!sp_packet_parse(&pf->packet, payload_buf, payload_len))
     return 0;
 
   g_sw_stats.packets_received++;
-  g_sw_stats.bytes_received += buf_len;
+  g_sw_stats.bytes_received += (uint32_t)buf_len;
 
   return 1;  /* Success */
 }
@@ -115,7 +115,7 @@ size_t sw_packet_create(uint8_t device_addr,
   sw_packet_init(&pf, &config);
 
   /* Set CCSDS packet fields */
-  pf.packet.ph.apid = apid;
+  pf.packet.ph.apid = (unsigned)(apid & 0x7FFU);
   pf.packet.payload = payload;
   pf.packet.payload_len = payload_len;
 
