@@ -23,7 +23,7 @@ Minimal, embedded-optimized implementation of **CCSDS Space Wire Protocol** comb
 - **Minimal footprint**: ~5KB library size (stripped)
 - **Zero allocation**: Stack-based, no dynamic memory
 - **Embedded-optimized**: No external dependencies except EmbeddedSpacePacket
-- **Portable**: Pure C99, big-endian network byte order
+- **Portable**: Pure C11, big-endian network byte order
 - **Fast**: Lookup-table CRC computation
 
 ## Project Structure

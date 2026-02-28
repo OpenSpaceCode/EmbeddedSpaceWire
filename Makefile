@@ -7,6 +7,11 @@ CFLAGS ?= -O2 -Iinclude -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
 AR ?= ar
 CFLAGS += -I./external/EmbeddedSpacePacket/include -fPIC
 
+BUILD_DIR ?= build
+OBJ_DIR := $(BUILD_DIR)/obj
+LIB_DIR := $(BUILD_DIR)/lib
+BIN_DIR := $(BUILD_DIR)/bin
+
 # Source files
 CORE_SRCS := src/spacewire_codec.c \
              src/spacewire_frame.c \
@@ -38,6 +43,7 @@ all: lib example
 lib: $(LIB_STATIC) $(LIB_SHARED)
 
 $(LIB_STATIC): $(CORE_OBJS) $(ESP_OBJS)
+	@mkdir -p $(dir $@)
 	$(AR) rcs $@ $^
 
 $(LIB_SHARED): $(CORE_OBJS) $(ESP_OBJS)
