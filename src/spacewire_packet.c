@@ -39,6 +39,14 @@ size_t sw_packet_encode(const sw_packet_frame_t *pf, uint8_t *buf, size_t buf_le
   if (!pf || !buf)
     return 0;
 
+  if (pf->packet.payload_len > 0 && pf->packet.payload == NULL)
+    return 0;
+
+  if (pf->packet.ph.sec_hdr_flag) {
+    if (pf->packet.sec_hdr == NULL || pf->packet.sec_hdr_len < 2)
+      return 0;
+  }
+
   /* First, serialize the CCSDS packet */
   size_t pkt_size = sp_packet_serialize_size(&pf->packet);
   if (pkt_size == 0 || pkt_size > SW_FRAME_MAX_PAYLOAD)

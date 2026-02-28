@@ -58,6 +58,7 @@ dkms.conf
 examples/spacepacket_example
 tests/ctest
 build/
+external/
 spacewire_example
 spacewire_tests
 

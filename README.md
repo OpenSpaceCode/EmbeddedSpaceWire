@@ -43,7 +43,10 @@ EmbeddedSpaceWire/
 ├── examples/
 │   └── main.c               # Example usage
 ├── tests/
+│   ├── cunit.h              # Tiny C test helpers
 │   └── unit_tests.c         # Unit tests
+├── scripts/
+│   └── coverage_html.sh     # HTML coverage generator
 ├── Makefile
 └── README.md
 ```
@@ -60,14 +63,14 @@ make all
 
 ```bash
 make lib
-# Produces: libspacewire.a (static) and libspacewire.so (shared)
+# Produces: build/lib/libspacewire.a (static) and build/lib/libspacewire.so (shared)
 ```
 
 ### Build Example
 
 ```bash
 make example
-./spacewire_example
+./build/bin/spacewire_example
 ```
 
 ### Run Tests
@@ -76,10 +79,20 @@ make example
 make test
 ```
 
+Test binary path: `build/bin/spacewire_tests`.
+
+### Coverage (HTML)
+
+```bash
+make coverage-html
+```
+
+Coverage report is generated at `build/coverage/index.html`.
+
 ### Clean
 
 ```bash
-make clean      # Remove build artifacts
+make clean      # Remove build/ artifacts
 make distclean  # Deep clean including object files
 ```
 
