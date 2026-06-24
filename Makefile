@@ -21,7 +21,11 @@ CORE_SRCS := src/spacewire_codec.c \
 ESP_SRCS := external/EmbeddedSpacePacket/src/space_packet.c
 
 EXAMPLE_SRCS := examples/main.c
-TEST_SRCS := tests/unit_tests.c
+TEST_SRCS := tests/unit_tests.c \
+             tests/test_codec.c \
+             tests/test_frame.c \
+             tests/test_router.c \
+             tests/test_packet.c
 
 # Object files
 CORE_OBJS := $(patsubst %.c,$(OBJ_DIR)/%.o,$(CORE_SRCS))
