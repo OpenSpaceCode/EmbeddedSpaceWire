@@ -1,0 +1,61 @@
+---
+Language: C
+BasedOnStyle: LLVM
+
+# Indentation
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ContinuationIndentWidth: 4
+
+# Line length — keep short for embedded readability
+ColumnLimit: 100
+
+# Braces
+BreakBeforeBraces: Allman
+InsertBraces: false
+
+# Spaces
+SpaceAfterCStyleCast: false
+SpaceBeforeParens: ControlStatements
+SpaceInEmptyParentheses: false
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+SpaceBeforeSquareBrackets: false
+
+# Alignment
+AlignTrailingComments:
+  Kind: Always
+  OverEmptyLines: 0
+
+# Pointers — ptr goes with the type
+PointerAlignment: Right
+ReferenceAlignment: Right
+
+# Short constructs — keep them on separate lines for readability
+AllowShortBlocksOnASingleLine: Never
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+
+# Function parameters
+BinPackArguments: false
+BinPackParameters: false
+AllowAllArgumentsOnNextLine: false
+AllowAllParametersOfDeclarationOnNextLine: false
+PenaltyReturnTypeOnItsOwnLine: 10000
+
+# Includes
+SortIncludes: CaseInsensitive
+IncludeBlocks: Regroup
+
+# Preprocessor
+IndentPPDirectives: AfterHash
+
+# Misc
+MaxEmptyLinesToKeep: 1
+KeepEmptyLinesAtTheStartOfBlocks: false
+
+# Do not indent extern "C" blocks
+IndentExternBlock: NoIndent
