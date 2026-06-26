@@ -4,8 +4,8 @@ Minimal, embedded-optimized implementation of **CCSDS Space Wire Protocol** comb
 
 ## Standards Compliance
 
-- **CCSDS 131.0-B-2**: Space Wire - Communication Protocol
-- **ECSS-E-ST-50-53C**: Space Wire Protocol Specification
+- **ECSS-E-ST-50-12C**: Space Wire Protocol Specification
+- **ECSS-E-ST-50-53C**: SpaceWire – CCSDS packet transfer protocol
 - **CCSDS 133.0-B-2**: CCSDS Space Packet
 
 ## Features
