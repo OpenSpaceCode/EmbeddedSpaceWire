@@ -1,6 +1,6 @@
 # EmbeddedSpaceWire
 
-Minimal, embedded-optimized implementation of **CCSDS Space Wire Protocol** combined with **CCSDS Space Packet Transfer** protocol, following international standards.
+Minimal, embedded-optimized implementation of **CCSDS Space Wire Protocol** combined with **CCSDS Space Packet Transfer** protocol, following standards.
 
 ## Standards Compliance
 

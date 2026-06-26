@@ -83,8 +83,8 @@ int main(void)
     pf.packet.ph.apid = 0x0042; /* APID = 0x0042 */
     pf.packet.ph.seq_count = 1;
     const char *msg = "Hello Space Wire";
-    pf.packet.payload = (const uint8_t *)msg;
-    pf.packet.payload_len = (uint16_t)strlen(msg);
+    pf.packet.data = (const uint8_t *)msg;
+    pf.packet.data_len = (uint16_t)strlen(msg);
 
     uint8_t pkt_buf[512];
     size_t pkt_size = sw_packet_encode(&pf, pkt_buf, sizeof(pkt_buf));
@@ -104,10 +104,10 @@ int main(void)
     if (sw_packet_decode(&decoded_pf, pkt_buf, pkt_size))
     {
         printf("    Decoded APID: 0x%04X\n", decoded_pf.packet.ph.apid);
-        printf("    Decoded payload length: %u bytes\n", decoded_pf.packet.payload_len);
+        printf("    Decoded payload length: %u bytes\n", decoded_pf.packet.data_len);
         printf("    Decoded payload: \"%.*s\"\n",
-               decoded_pf.packet.payload_len,
-               (const char *)decoded_pf.packet.payload);
+               decoded_pf.packet.data_len,
+               (const char *)decoded_pf.packet.data);
         printf("    ✓ Packet decoding successful\n\n");
     }
     else

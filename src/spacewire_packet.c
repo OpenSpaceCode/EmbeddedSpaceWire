@@ -28,7 +28,7 @@ void sw_packet_init(sw_packet_frame_t *pf, const sw_packet_config_t *config)
     /* Initialize packet */
     sp_packet_init(&pf->packet);
     pf->packet.ph.version = 0;
-    pf->packet.ph.type = 1; /* Telemetry */
+    pf->packet.ph.type = SP_PACKET_TYPE_TC; /* default Packet Type (CCSDS: TM=0, TC=1) */
     pf->packet.ph.sec_hdr_flag = 0;
     pf->packet.ph.apid = 0;
 }
@@ -42,14 +42,8 @@ size_t sw_packet_encode(const sw_packet_frame_t *pf, uint8_t *buf, size_t buf_le
     if (!pf || !buf)
         return 0;
 
-    if (pf->packet.payload_len > 0 && pf->packet.payload == NULL)
+    if (pf->packet.data_len > 0 && pf->packet.data == NULL)
         return 0;
-
-    if (pf->packet.ph.sec_hdr_flag)
-    {
-        if (pf->packet.sec_hdr == NULL || pf->packet.sec_hdr_len < 2)
-            return 0;
-    }
 
     /* First, serialize the CCSDS packet */
     size_t pkt_size = sp_packet_serialize_size(&pf->packet);
@@ -129,8 +123,8 @@ size_t sw_packet_create(uint8_t device_addr,
 
     /* Set CCSDS packet fields */
     pf.packet.ph.apid = (unsigned)(apid & 0x7FFU);
-    pf.packet.payload = payload;
-    pf.packet.payload_len = payload_len;
+    pf.packet.data = payload;
+    pf.packet.data_len = payload_len;
 
     /* Serialize and return */
     return sw_packet_encode(&pf, buf, buf_len);

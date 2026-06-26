@@ -18,8 +18,8 @@ static int test_packet_encode_decode(void)
     pf.packet.ph.apid = 0x0100;
     const char *payload_str = "Test payload";
     uint16_t payload_len = (uint16_t)strlen(payload_str);
-    pf.packet.payload = (const uint8_t *)payload_str;
-    pf.packet.payload_len = payload_len;
+    pf.packet.data = (const uint8_t *)payload_str;
+    pf.packet.data_len = payload_len;
 
     uint8_t buf[512];
     size_t encoded_size = sw_packet_encode(&pf, buf, sizeof(buf));
@@ -29,7 +29,7 @@ static int test_packet_encode_decode(void)
     int result = sw_packet_decode(&decoded_pf, buf, encoded_size);
     ASSERT_EQ_INT(1, result);
     ASSERT_EQ_INT(0x0100, decoded_pf.packet.ph.apid);
-    ASSERT_EQ_INT(payload_len, decoded_pf.packet.payload_len);
+    ASSERT_EQ_INT(payload_len, decoded_pf.packet.data_len);
 
     return 0;
 }
@@ -88,23 +88,16 @@ static int test_packet_encode_error_paths(void)
     ASSERT_EQ_INT(0, sw_packet_encode(&pf, NULL, sizeof(buf)));
 
     static uint8_t dummy_payload = 0x11;
-    pf.packet.payload = &dummy_payload;
-    pf.packet.payload_len = UINT16_MAX;
+    pf.packet.data = &dummy_payload;
+    pf.packet.data_len = UINT16_MAX; /* 6 + 65535 exceeds SW_FRAME_MAX_PAYLOAD */
     ASSERT_EQ_INT(0, sw_packet_encode(&pf, buf, sizeof(buf)));
 
-    pf.packet.payload = NULL;
-    pf.packet.payload_len = 8;
+    pf.packet.data = NULL;
+    pf.packet.data_len = 8; /* non-zero length with NULL data */
     ASSERT_EQ_INT(0, sw_packet_encode(&pf, buf, sizeof(buf)));
 
-    pf.packet.payload = &dummy_payload;
-    pf.packet.payload_len = 0;
-    pf.packet.ph.sec_hdr_flag = 1;
-    pf.packet.sec_hdr = NULL;
-    pf.packet.sec_hdr_len = 2;
-    ASSERT_EQ_INT(0, sw_packet_encode(&pf, buf, sizeof(buf)));
-
-    pf.packet.sec_hdr = &dummy_payload;
-    pf.packet.sec_hdr_len = 1;
+    pf.packet.data = &dummy_payload;
+    pf.packet.data_len = 0; /* empty CCSDS data field is not serialisable */
     ASSERT_EQ_INT(0, sw_packet_encode(&pf, buf, sizeof(buf)));
 
     return 0;
@@ -150,8 +143,8 @@ static int test_packet_decode_error_paths_and_stats(void)
     sw_packet_init(&tx_pf, &config);
     tx_pf.packet.ph.apid = 0x22;
     static uint8_t payload[] = {1, 2, 3, 4};
-    tx_pf.packet.payload = payload;
-    tx_pf.packet.payload_len = sizeof(payload);
+    tx_pf.packet.data = payload;
+    tx_pf.packet.data_len = sizeof(payload);
 
     uint8_t packet_buf[512];
     size_t packet_len = sw_packet_encode(&tx_pf, packet_buf, sizeof(packet_buf));
