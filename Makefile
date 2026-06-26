@@ -3,7 +3,7 @@ CC ?= cc
 CFLAGS ?= -O2 -Iinclude -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
 		  -Wcast-align -Wcast-qual -Wpointer-arith -Wformat=2 \
 		  -Wmissing-prototypes -Wstrict-prototypes -Wredundant-decls -Wundef \
-		  -std=c11
+		  -std=c99
 AR ?= ar
 CFLAGS += -I./external/EmbeddedSpacePacket/include -fPIC
 
