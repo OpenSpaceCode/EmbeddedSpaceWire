@@ -71,10 +71,10 @@ int main(void)
     printf("[4] CCSDS Packet + Space Wire Integration\n");
     printf("    Creating complete packet frame\n");
 
-    sw_packet_config_t pkt_config = {.device_addr = 0x01,
-                                     .target_addr = 0x02,
-                                     .protocol_id = 1,
-                                     .enable_crc = 1};
+    sw_packet_config_t pkt_config = {.path = NULL,
+                                     .path_len = 0,
+                                     .logical_addr = SW_PTP_LOGICAL_ADDR_DEFAULT,
+                                     .user_app = 0x00};
 
     sw_packet_frame_t pf;
     sw_packet_init(&pf, &pkt_config);
@@ -101,13 +101,16 @@ int main(void)
     printf("    Parsing Space Wire frame and CCSDS packet\n");
 
     sw_packet_frame_t decoded_pf;
-    if (sw_packet_decode(&decoded_pf, pkt_buf, pkt_size))
+    sw_ptp_status_t status;
+    if (sw_packet_decode(&decoded_pf, pkt_buf, pkt_size, SW_END_EOP, &status))
     {
         printf("    Decoded APID: 0x%04X\n", decoded_pf.packet.ph.apid);
+        printf("    Decoded user application: 0x%02X\n", decoded_pf.user_app);
         printf("    Decoded payload length: %u bytes\n", decoded_pf.packet.data_len);
         printf("    Decoded payload: \"%.*s\"\n",
                decoded_pf.packet.data_len,
                (const char *)decoded_pf.packet.data);
+        printf("    Status: %u (0 = OK)\n", (unsigned)status);
         printf("    ✓ Packet decoding successful\n\n");
     }
     else
@@ -181,7 +184,7 @@ int main(void)
     printf("    Packets received: %u\n", stats.packets_received);
     printf("    Bytes sent: %u\n", stats.bytes_sent);
     printf("    Bytes received: %u\n", stats.bytes_received);
-    printf("    CRC errors: %u\n", stats.crc_errors);
+    printf("    Packets discarded: %u\n", stats.packets_discarded);
     printf("    ✓ Statistics available\n\n");
 
     printf("===============================================\n");
