@@ -76,7 +76,7 @@ clean:
 	rm -f libspacewire.a libspacewire.so spacewire_example spacewire_tests
 
 coverage-html:
-	bash scripts/coverage_html.sh
+	bash tools/coverage_html.sh
 
 distclean: clean
 	find . -name "*.o" -delete

@@ -45,7 +45,7 @@ EmbeddedSpaceWire/
 ├── tests/
 │   ├── cunit.h              # Tiny C test helpers
 │   └── unit_tests.c         # Unit tests
-├── scripts/
+├── tools/
 │   └── coverage_html.sh     # HTML coverage generator
 ├── Makefile
 └── README.md
