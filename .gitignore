@@ -56,7 +56,6 @@ dkms.conf
 
 # Build outputs
 build/
-external/
 
 # Editor configs
 .vscode/
