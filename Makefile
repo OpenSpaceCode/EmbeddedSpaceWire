@@ -42,7 +42,7 @@ TEST_BIN := $(BIN_DIR)/spacewire_tests
 # Build targets
 .PHONY: all clean test example lib coverage-html help distclean
 
-all: lib example
+all: lib test
 
 lib: $(LIB_STATIC) $(LIB_SHARED)
 
