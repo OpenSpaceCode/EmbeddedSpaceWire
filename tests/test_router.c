@@ -2,93 +2,125 @@
 #include "spacewire.h"
 #include "test_runners.h"
 
-static int test_router_initialization(void)
+#include <string.h>
+
+static int test_router_init(void)
 {
     sw_router_t router;
-    sw_router_init(&router, 0x42, 3);
-
-    ASSERT_EQ_INT(0x42, router.device_addr);
-    ASSERT_EQ_INT(3, router.num_ports);
+    sw_router_init(&router, 4);
+    ASSERT_EQ_INT(4, router.num_ports);
     ASSERT_EQ_INT(0, router.links[0].port_id);
-    ASSERT_EQ_INT(0, router.channels[0].active);
+    ASSERT_EQ_INT(SW_LINK_UNINITIALIZED, router.links[0].state);
+    ASSERT_EQ_INT(0, (int)router.invalid_address_errors);
 
+    /* num_ports is clamped to [1, SW_NUM_PORTS]. */
+    sw_router_init(&router, 0);
+    ASSERT_EQ_INT(1, router.num_ports);
+    sw_router_init(&router, 200);
+    ASSERT_EQ_INT(SW_NUM_PORTS, router.num_ports);
+
+    sw_router_init(NULL, 4); /* must not crash */
     return 0;
 }
 
-static int test_router_routing(void)
+static int test_router_path_addressing(void)
 {
     sw_router_t router;
-    sw_router_init(&router, 0x01, 2);
+    sw_router_init(&router, 8); /* ports 0..7 */
 
-    sw_router_add_route(&router, 0x02, 0);
-    sw_router_add_route(&router, 0x03, 1);
+    uint8_t port = 0xFF;
+    uint8_t del = 0xFF;
 
-    router.links[0].state = SW_LINK_CONNECTED;
-    router.links[1].state = SW_LINK_CONNECTED;
+    /* Leading char 3 -> output port 3, always deleted (clause 5.6.8.3). */
+    uint8_t pkt[3] = {3, 0xAA, 0xBB};
+    ASSERT_EQ_INT(SW_ROUTE_OK, sw_router_route(&router, pkt, sizeof(pkt), &port, &del));
+    ASSERT_EQ_INT(3, port);
+    ASSERT_EQ_INT(1, del);
 
-    sw_frame_t frame;
-    sw_frame_init(&frame);
-    frame.target_addr = 0x02;
+    /* Leading char 0 -> configuration port. */
+    uint8_t cfg[2] = {0, 0x11};
+    ASSERT_EQ_INT(SW_ROUTE_OK, sw_router_route(&router, cfg, sizeof(cfg), &port, &del));
+    ASSERT_EQ_INT(SW_PORT_CONFIG, port);
+    ASSERT_EQ_INT(1, del);
 
-    uint8_t output_port;
-    int result = sw_router_route_frame(&router, &frame, &output_port);
-    ASSERT_EQ_INT(1, result);
-    ASSERT_EQ_INT(0, output_port);
-
-    frame.target_addr = 0x03;
-    result = sw_router_route_frame(&router, &frame, &output_port);
-    ASSERT_EQ_INT(1, result);
-    ASSERT_EQ_INT(1, output_port);
-
+    /* A path char referencing a non-existent port is discarded (clause 5.6.8.5). */
+    uint8_t bad[2] = {20, 0x11};
+    ASSERT_EQ_INT(SW_ROUTE_DISCARD, sw_router_route(&router, bad, sizeof(bad), &port, &del));
+    ASSERT_EQ_INT(1, (int)router.invalid_address_errors);
     return 0;
 }
 
-static int test_router_error_paths_and_channels(void)
+static int test_router_logical_addressing(void)
 {
-    sw_router_init(NULL, 0x01, 2);
-
     sw_router_t router;
-    sw_router_init(&router, 0x44, SW_MAX_PORTS + 2);
-    ASSERT_EQ_INT(SW_MAX_PORTS, router.num_ports);
+    sw_router_init(&router, 8);
 
-    sw_router_add_route(NULL, 0x01, 0);
-    sw_router_add_route(&router, SW_MAX_PORTS, 0);
+    ASSERT_EQ_INT(1, sw_router_add_route(&router, 0x40, 5, 0)); /* retain address */
+    ASSERT_EQ_INT(1, sw_router_add_route(&router, 0x41, 6, 1)); /* delete address */
 
-    sw_router_add_route(&router, 0x01, 1);
-    ASSERT_EQ_INT(1, router.routes[0x01].output_port);
-    sw_router_add_route(&router, 0x01, SW_MAX_PORTS);
-    ASSERT_EQ_INT(1, router.routes[0x01].output_port);
+    uint8_t port = 0xFF;
+    uint8_t del = 0xFF;
 
-    ASSERT_EQ_INT(0, sw_router_open_channel(NULL, 0));
-    ASSERT_EQ_INT(0, sw_router_open_channel(&router, SW_MAX_VIRTUAL_CHANNELS));
-    ASSERT_EQ_INT(1, sw_router_open_channel(&router, 3));
-    ASSERT_EQ_INT(1, router.channels[3].active);
+    /* Logical address retained by default (clause 5.6.8.4 f). */
+    uint8_t p1[2] = {0x40, 0x99};
+    ASSERT_EQ_INT(SW_ROUTE_OK, sw_router_route(&router, p1, sizeof(p1), &port, &del));
+    ASSERT_EQ_INT(5, port);
+    ASSERT_EQ_INT(0, del);
 
-    sw_frame_t frame;
-    sw_frame_init(&frame);
-    frame.target_addr = 0x01;
+    /* Logical address deleted when configured to (clause 5.6.8.6). */
+    uint8_t p2[2] = {0x41, 0x99};
+    ASSERT_EQ_INT(SW_ROUTE_OK, sw_router_route(&router, p2, sizeof(p2), &port, &del));
+    ASSERT_EQ_INT(6, port);
+    ASSERT_EQ_INT(1, del);
 
-    uint8_t output_port = 0xFF;
-    ASSERT_EQ_INT(0, sw_router_route_frame(NULL, &frame, &output_port));
-    ASSERT_EQ_INT(0, sw_router_route_frame(&router, NULL, &output_port));
-    ASSERT_EQ_INT(0, sw_router_route_frame(&router, &frame, NULL));
+    /* Unconfigured logical address -> discard + error. */
+    uint8_t p3[2] = {0x77, 0x99};
+    ASSERT_EQ_INT(SW_ROUTE_DISCARD, sw_router_route(&router, p3, sizeof(p3), &port, &del));
 
-    frame.target_addr = router.device_addr;
-    ASSERT_EQ_INT(0, sw_router_route_frame(&router, &frame, &output_port));
+    /* Reserved logical address 255 -> discard + error (clause 5.6.8.5 NOTE). */
+    uint8_t p4[2] = {0xFF, 0x99};
+    ASSERT_EQ_INT(SW_ROUTE_DISCARD, sw_router_route(&router, p4, sizeof(p4), &port, &del));
+    ASSERT_EQ_INT(2, (int)router.invalid_address_errors);
+    return 0;
+}
 
-    frame.target_addr = SW_MAX_PORTS;
-    ASSERT_EQ_INT(0, sw_router_route_frame(&router, &frame, &output_port));
+static int test_router_add_route_validation(void)
+{
+    sw_router_t router;
+    sw_router_init(&router, 4); /* ports 0..3 */
 
-    sw_router_t one_port_router;
-    sw_router_init(&one_port_router, 0x10, 1);
-    one_port_router.routes[0x01].output_port = 1;
-    frame.target_addr = 0x01;
-    ASSERT_EQ_INT(0, sw_router_route_frame(&one_port_router, &frame, &output_port));
+    ASSERT_EQ_INT(0, sw_router_add_route(NULL, 0x40, 1, 0));
+    /* A path-range address may not be used as a logical route. */
+    ASSERT_EQ_INT(0, sw_router_add_route(&router, 0x10, 1, 0));
+    /* The reserved address 255 may not be configured. */
+    ASSERT_EQ_INT(0, sw_router_add_route(&router, 0xFF, 1, 0));
+    /* Output port must exist. */
+    ASSERT_EQ_INT(0, sw_router_add_route(&router, 0x40, 4, 0));
+    /* Boundaries: lowest logical address and highest valid port. */
+    ASSERT_EQ_INT(1, sw_router_add_route(&router, 0x20, 3, 0));
+    ASSERT_EQ_INT(1, sw_router_add_route(&router, 0xFE, 0, 0));
+    return 0;
+}
 
-    sw_router_add_route(&one_port_router, 0x02, 0);
-    frame.target_addr = 0x02;
-    ASSERT_EQ_INT(0, sw_router_route_frame(&one_port_router, &frame, &output_port));
+static int test_router_route_invalid_args_and_empty(void)
+{
+    sw_router_t router;
+    sw_router_init(&router, 4);
 
+    uint8_t pkt[2] = {0x40, 0x00};
+    uint8_t port = 0;
+    uint8_t del = 0;
+
+    ASSERT_EQ_INT(SW_ROUTE_DISCARD, sw_router_route(NULL, pkt, sizeof(pkt), &port, &del));
+    ASSERT_EQ_INT(SW_ROUTE_DISCARD, sw_router_route(&router, NULL, sizeof(pkt), &port, &del));
+    ASSERT_EQ_INT(SW_ROUTE_DISCARD, sw_router_route(&router, pkt, sizeof(pkt), NULL, &del));
+    ASSERT_EQ_INT(SW_ROUTE_DISCARD, sw_router_route(&router, pkt, sizeof(pkt), &port, NULL));
+    /* Invalid arguments are rejected before any counter is touched. */
+    ASSERT_EQ_INT(0, (int)router.packets_discarded);
+
+    /* An empty packet is discarded by the first routing switch (clause 5.6.2.1). */
+    ASSERT_EQ_INT(SW_ROUTE_DISCARD, sw_router_route(&router, pkt, 0, &port, &del));
+    ASSERT_EQ_INT(1, (int)router.packets_discarded);
     return 0;
 }
 
@@ -126,9 +158,11 @@ static int test_link_layer_state_helpers(void)
 
 test_result_t test_spacewire_router_run_all(void)
 {
-    RUN_TEST(test_router_initialization);
-    RUN_TEST(test_router_routing);
-    RUN_TEST(test_router_error_paths_and_channels);
+    RUN_TEST(test_router_init);
+    RUN_TEST(test_router_path_addressing);
+    RUN_TEST(test_router_logical_addressing);
+    RUN_TEST(test_router_add_route_validation);
+    RUN_TEST(test_router_route_invalid_args_and_empty);
     RUN_TEST(test_link_layer_state_helpers);
     return (test_result_t){cunit_total_tests - cunit_overall_failures, cunit_total_tests};
 }

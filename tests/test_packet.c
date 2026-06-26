@@ -284,6 +284,31 @@ static int test_packet_statistics(void)
     return 0;
 }
 
+/* The virtual channel rides in the User Application field (clause 5.3.5 NOTE 2). */
+static int test_packet_virtual_channel(void)
+{
+    static const uint8_t data[4] = {1, 2, 3, 4};
+    sw_packet_frame_t pf;
+    make_sample(&pf, data, sizeof(data));
+
+    sw_packet_set_virtual_channel(&pf, 0x07);
+    ASSERT_EQ_INT(0x07, sw_packet_virtual_channel(&pf));
+    ASSERT_EQ_INT(0x07, pf.user_app);
+
+    uint8_t buf[64];
+    size_t n = sw_packet_encode(&pf, buf, sizeof(buf));
+    ASSERT_TRUE(n > 0);
+
+    sw_packet_frame_t out;
+    sw_ptp_status_t status = SW_PTP_STATUS_INVALID;
+    ASSERT_EQ_INT(1, sw_packet_decode(&out, buf, n, SW_END_EOP, &status));
+    ASSERT_EQ_INT(0x07, sw_packet_virtual_channel(&out));
+
+    sw_packet_set_virtual_channel(NULL, 0x09); /* no-op, must not crash */
+    ASSERT_EQ_INT(0, sw_packet_virtual_channel(NULL));
+    return 0;
+}
+
 test_result_t test_spacewire_packet_run_all(void)
 {
     RUN_TEST(test_packet_wire_format);
@@ -296,6 +321,7 @@ test_result_t test_spacewire_packet_run_all(void)
     RUN_TEST(test_packet_encode_error_paths);
     RUN_TEST(test_packet_decode_error_paths);
     RUN_TEST(test_packet_create_convenience);
+    RUN_TEST(test_packet_virtual_channel);
     RUN_TEST(test_packet_statistics);
     return (test_result_t){cunit_total_tests - cunit_overall_failures, cunit_total_tests};
 }

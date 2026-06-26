@@ -1,8 +1,8 @@
 /*
- * CCSDS Space Wire Protocol Implementation
+ * SpaceWire protocol — network, link and codec layers.
  * Minimal, embedded-optimized implementation following:
- * - CCSDS 131.0-B-2 (Space Wire - Communication Protocol)
- * - ECSS-E-ST-50-53C (SpaceWire Protocol)
+ * - ECSS-E-ST-50-12C Rev.1 (SpaceWire — links, nodes, routers and networks)
+ * - ECSS-E-ST-50-53C (SpaceWire — CCSDS packet transfer protocol)
  */
 
 #ifndef SPACEWIRE_H
@@ -54,64 +54,62 @@ sw_char_result_t sw_decode_char(uint8_t byte, uint8_t parity_bit, uint8_t *data)
 uint8_t sw_encode_char(uint8_t data, uint8_t *byte);
 
 /* ============================================================================
- * SPACEWIRE FRAMING
- * Implements frame structure and error detection
+ * SPACEWIRE PACKET (ECSS-E-ST-50-12C clause 5.6.2)
+ *
+ * A SpaceWire packet is a sequence of data characters terminated by an end of
+ * packet marker (EOP or EEP). The leading data characters form the destination
+ * address; the remaining characters form the cargo:
+ *
+ *     [ Destination Address ][ Cargo ][ EOP | EEP ]
+ *
+ * The end marker is a control character emitted by the link layer, not a data
+ * octet, so it is not stored in the packet buffer. No checksum is added.
  * ============================================================================ */
 
-/* Frame structure:
- * - Header (1-4 bytes): Address path, Protocol ID
- * - Payload (0-255 bytes): CCSDS packet or raw data
- * - CRC (2 bytes): CRC-16-CCITT
- */
-
-#define SW_FRAME_MAX_PAYLOAD 65535
-#define SW_FRAME_HEADER_MAX 4
-#define SW_FRAME_CRC_LEN 2
-
-typedef struct
-{
-    uint8_t target_addr; /* Target logical address (0-254) */
-    uint8_t protocol_id; /* Protocol identifier (1=CCSDS, 2=Raw) */
-    uint8_t *payload;    /* Non-const: decode path must pass to sp_packet_parse(uint8_t *) */
-    uint16_t payload_len;
-} sw_frame_t;
-
-/* Initialize frame structure */
-void sw_frame_init(sw_frame_t *frame);
-
-/* Calculate required buffer size for frame (header + payload + CRC) */
-size_t sw_frame_size(const sw_frame_t *frame);
-
-/* Serialize frame into buffer with CRC calculation */
-size_t sw_frame_encode(const sw_frame_t *frame, uint8_t *buf, size_t buf_len);
-
-/* Parse frame from buffer and verify CRC */
-int sw_frame_decode(sw_frame_t *frame, uint8_t *buf, size_t buf_len);
+/* Build a SpaceWire packet by prefixing a destination address to a cargo.
+ * Copies [dest][cargo] into buf; either part may be empty (NULL with length 0).
+ * Returns the total length written, or 0 on error (a NULL pointer paired with a
+ * non-zero length, an empty result, or a buffer that is too small). */
+size_t sw_spw_packet_build(const uint8_t *dest,
+                           size_t dest_len,
+                           const uint8_t *cargo,
+                           size_t cargo_len,
+                           uint8_t *buf,
+                           size_t buf_len);
 
 /* ============================================================================
- * SPACEWIRE ROUTER
- * Packet routing with virtual channel support
+ * SPACEWIRE ROUTING (ECSS-E-ST-50-12C clause 5.6.8)
+ *
+ * A routing switch forwards a packet to an output port selected by the leading
+ * data character of the packet's destination address (Table 5-11):
+ *   - 0        configuration port (path addressing only)          (clause 5.6.8.2)
+ *   - 1..31    external output port with that number (path addr)  (clause 5.6.8.3)
+ *   - 32..254  logical address, mapped via the routing table      (clause 5.6.8.4)
+ *   - 255      reserved logical address, must not be used
+ * A path address character is always deleted after use; a logical address is
+ * retained unless its routing-table entry requests deletion (clause 5.6.8.6).
  * ============================================================================ */
 
-#define SW_MAX_VIRTUAL_CHANNELS 16
-#define SW_MAX_PORTS 8
+/* Port 0 is the configuration port; external ports are 1..31 (clause 5.6.8.2). */
+#define SW_PORT_CONFIG 0u
+#define SW_PORT_EXTERNAL_MAX 31u
 
-/* Routing entry for packet forwarding */
-typedef struct
-{
-    uint8_t dest_addr;
-    uint8_t output_port;
-} sw_route_t;
+/* Number of ports a router can have (0..31). Override with -DSW_NUM_PORTS=n to
+ * shrink the per-router footprint for small nodes. */
+#ifndef SW_NUM_PORTS
+#define SW_NUM_PORTS 32u
+#endif
 
-/* Virtual channel (circuit) */
-typedef struct
-{
-    uint8_t channel_id;
-    uint8_t active;
-    uint16_t fct_credits; /* Flow Control Credits */
-} sw_virtual_channel_t;
+/* Address ranges (clause 5.6.8, Table 5-11). */
+#define SW_PATH_ADDR_MAX 31u        /* 0..31    path address    */
+#define SW_LOGICAL_ADDR_MIN 32u     /* 32..255  logical address */
+#define SW_LOGICAL_ADDR_RESERVED 255u
+#define SW_LOGICAL_ADDR_DEFAULT 254u
 
-/* Space Wire link state */
+/* The routing table is indexed directly by the leading data character. */
+#define SW_ROUTE_TABLE_SIZE 256u
+
+/* SpaceWire link state (clause 5.5.7 link initialisation). */
 typedef enum
 {
     SW_LINK_UNINITIALIZED = 0,
@@ -130,26 +128,54 @@ typedef struct
     uint32_t errors;
 } sw_link_t;
 
+/* One routing-table entry mapping a logical address to an output port. */
 typedef struct
 {
-    sw_link_t links[SW_MAX_PORTS];
-    sw_virtual_channel_t channels[SW_MAX_VIRTUAL_CHANNELS];
-    sw_route_t routes[SW_MAX_PORTS];
-    uint8_t device_addr;
-    uint8_t num_ports;
+    uint8_t output_port; /* port the packet is forwarded through */
+    uint8_t configured;  /* 1 if this logical address has a valid route */
+    uint8_t delete_addr; /* 1 to delete the logical address before forwarding (clause 5.6.8.6) */
+} sw_route_entry_t;
+
+typedef struct
+{
+    sw_link_t links[SW_NUM_PORTS];
+    sw_route_entry_t routes[SW_ROUTE_TABLE_SIZE];
+    uint8_t num_ports;               /* ports present: 1..SW_NUM_PORTS (port 0 is config) */
+    uint32_t invalid_address_errors; /* invalid / unconfigured address discards (clause 5.6.8.5) */
+    uint32_t packets_routed;
+    uint32_t packets_discarded;
 } sw_router_t;
 
-/* Initialize router */
-void sw_router_init(sw_router_t *router, uint8_t device_addr, uint8_t num_ports);
+/* Result of a routing decision. */
+typedef enum
+{
+    SW_ROUTE_OK = 0,     /* forward via the returned output port */
+    SW_ROUTE_DISCARD = 1 /* discard: empty packet, non-existent port, or unconfigured address */
+} sw_route_result_t;
 
-/* Configure routing entry */
-void sw_router_add_route(sw_router_t *router, uint8_t dest_addr, uint8_t output_port);
+/* Initialize a router. num_ports is clamped to [1, SW_NUM_PORTS] and counts the
+ * configuration port 0. */
+void sw_router_init(sw_router_t *router, uint8_t num_ports);
 
-/* Open virtual channel */
-int sw_router_open_channel(sw_router_t *router, uint8_t channel_id);
+/* Configure a logical-address route. logical_addr must be 32..254; output_port
+ * must be an existing port; delete_addr requests logical-address deletion
+ * (clause 5.6.8.6). Returns 1 on success, 0 on invalid arguments. */
+int sw_router_add_route(sw_router_t *router,
+                        uint8_t logical_addr,
+                        uint8_t output_port,
+                        int delete_addr);
 
-/* Route frame to appropriate port */
-int sw_router_route_frame(sw_router_t *router, const sw_frame_t *frame, uint8_t *output_port);
+/* Decide the output port for a packet from its leading destination-address
+ * character. On SW_ROUTE_OK, *output_port is set and *delete_leading is 1 when
+ * the leading character must be removed before forwarding (always for path
+ * addressing; for logical addressing only when configured for deletion), else 0.
+ * On SW_ROUTE_DISCARD the packet must be dropped; the router error/discard
+ * counters are updated accordingly. */
+sw_route_result_t sw_router_route(sw_router_t *router,
+                                  const uint8_t *packet,
+                                  size_t len,
+                                  uint8_t *output_port,
+                                  uint8_t *delete_leading);
 
 /* ============================================================================
  * SPACEWIRE LINK LAYER

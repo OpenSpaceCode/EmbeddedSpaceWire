@@ -99,7 +99,7 @@ typedef struct
     const uint8_t *path;  /**< Target SpaceWire (path) Address; NULL if unused (clause 5.3.1). */
     uint8_t path_len;     /**< Number of path octets (each must be 0..31). */
     uint8_t logical_addr; /**< Target Logical Address (clause 5.3.2). */
-    uint8_t user_app;     /**< User Application field (clause 5.3.5). */
+    uint8_t user_app;     /**< User Application field; may carry a virtual channel (clause 5.3.5). */
     sp_packet_t packet;   /**< Encapsulated CCSDS Space Packet. */
 } sw_packet_frame_t;
 
@@ -113,6 +113,40 @@ typedef struct
     uint8_t logical_addr; /**< Target Logical Address. */
     uint8_t user_app;     /**< User Application value. */
 } sw_packet_config_t;
+
+/**
+ * @brief Virtual channel number.
+ *
+ * ECSS-E-ST-50-53C clause 5.3.5 (NOTE 2) allows the User Application field to
+ * carry a virtual channel number, so a virtual channel is represented as that
+ * 8-bit value rather than as separate router state.
+ */
+typedef uint8_t sw_virtual_channel_t;
+
+/**
+ * @brief Select a virtual channel by setting the User Application field.
+ *
+ * @param[out] pf Packet frame. No-op if NULL.
+ * @param[in]  vc Virtual channel number.
+ */
+static inline void sw_packet_set_virtual_channel(sw_packet_frame_t *pf, sw_virtual_channel_t vc)
+{
+    if (pf)
+    {
+        pf->user_app = vc;
+    }
+}
+
+/**
+ * @brief Read the virtual channel carried in the User Application field.
+ *
+ * @param[in] pf Packet frame.
+ * @return Virtual channel number, or 0 if @p pf is NULL.
+ */
+static inline sw_virtual_channel_t sw_packet_virtual_channel(const sw_packet_frame_t *pf)
+{
+    return pf ? pf->user_app : (sw_virtual_channel_t)0;
+}
 
 /**
  * @brief Initialise a packet frame from configuration.

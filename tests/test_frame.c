@@ -2,106 +2,74 @@
 #include "spacewire.h"
 #include "test_runners.h"
 
-static int test_frame_encode_decode(void)
+#include <string.h>
+
+/* A logical-addressed packet: one address octet followed by the cargo. */
+static int test_packet_build_logical(void)
 {
-    uint8_t payload[] = {0x01, 0x02, 0x03, 0x04, 0x05};
-    sw_frame_t frame;
-    sw_frame_init(&frame);
-    frame.target_addr = 0x42;
-    frame.protocol_id = 1;
-    frame.payload = payload;
-    frame.payload_len = sizeof(payload);
+    uint8_t dest[1] = {0x40};
+    uint8_t cargo[3] = {0xAA, 0xBB, 0xCC};
+    uint8_t buf[16];
 
-    uint8_t buf[256];
-    size_t encoded_size = sw_frame_encode(&frame, buf, sizeof(buf));
-    ASSERT_TRUE(encoded_size > 0);
+    size_t n = sw_spw_packet_build(dest, sizeof(dest), cargo, sizeof(cargo), buf, sizeof(buf));
+    ASSERT_EQ_INT(4, (int)n);
 
-    sw_frame_t decoded;
-    int result = sw_frame_decode(&decoded, buf, encoded_size);
-    ASSERT_EQ_INT(1, result);
-    ASSERT_EQ_INT(0x42, decoded.target_addr);
-    ASSERT_EQ_INT(1, decoded.protocol_id);
-    ASSERT_EQ_INT(sizeof(payload), decoded.payload_len);
-    ASSERT_EQ_MEM(decoded.payload, payload, sizeof(payload));
-
+    const uint8_t expected[4] = {0x40, 0xAA, 0xBB, 0xCC};
+    ASSERT_EQ_MEM(buf, expected, sizeof(expected));
     return 0;
 }
 
-static int test_frame_crc_validation(void)
+/* A path-addressed packet: a multi-hop path address followed by the cargo. */
+static int test_packet_build_path(void)
 {
-    uint8_t payload[] = {0xAA, 0xBB};
-    sw_frame_t frame;
-    sw_frame_init(&frame);
-    frame.target_addr = 0x01;
-    frame.protocol_id = 1;
-    frame.payload = payload;
-    frame.payload_len = sizeof(payload);
+    uint8_t dest[3] = {2, 1, 3};
+    uint8_t cargo[2] = {0xDE, 0xAD};
+    uint8_t buf[16];
 
-    uint8_t buf[256];
-    size_t size = sw_frame_encode(&frame, buf, sizeof(buf));
-    ASSERT_TRUE(size > 0);
+    size_t n = sw_spw_packet_build(dest, sizeof(dest), cargo, sizeof(cargo), buf, sizeof(buf));
+    ASSERT_EQ_INT(5, (int)n);
 
-    buf[3] ^= 0xFF;
-
-    sw_frame_t decoded;
-    int result = sw_frame_decode(&decoded, buf, size);
-    ASSERT_EQ_INT(0, result);
-
+    const uint8_t expected[5] = {2, 1, 3, 0xDE, 0xAD};
+    ASSERT_EQ_MEM(buf, expected, sizeof(expected));
     return 0;
 }
 
-static int test_frame_size_calculation(void)
+/* A point-to-point link needs no destination address (clause 4.2.3.3). */
+static int test_packet_build_cargo_only(void)
 {
-    sw_frame_t frame;
-    sw_frame_init(&frame);
+    uint8_t cargo[2] = {0x11, 0x22};
+    uint8_t buf[8];
 
-    uint8_t payload[100];
-    frame.payload = payload;
-    frame.payload_len = 100;
-
-    size_t calc_size = sw_frame_size(&frame);
-    ASSERT_EQ_INT(104, calc_size);
-
+    size_t n = sw_spw_packet_build(NULL, 0, cargo, sizeof(cargo), buf, sizeof(buf));
+    ASSERT_EQ_INT(2, (int)n);
+    ASSERT_EQ_MEM(buf, cargo, sizeof(cargo));
     return 0;
 }
 
-static int test_frame_invalid_args_and_minimal_frame(void)
+static int test_packet_build_errors(void)
 {
-    sw_frame_init(NULL);
-    ASSERT_EQ_INT(0, sw_frame_size(NULL));
+    uint8_t dest[1] = {0x40};
+    uint8_t cargo[2] = {0x11, 0x22};
+    uint8_t buf[2];
 
-    sw_frame_t frame;
-    sw_frame_init(&frame);
-    frame.target_addr = 0x05;
-    frame.protocol_id = 0x01;
-
-    ASSERT_EQ_INT(0, sw_frame_encode(NULL, (uint8_t *)&frame, 4));
-
-    uint8_t buf[8] = {0};
-    ASSERT_EQ_INT(0, sw_frame_encode(&frame, NULL, sizeof(buf)));
-    ASSERT_EQ_INT(0, sw_frame_encode(&frame, buf, 3));
-
-    size_t encoded = sw_frame_encode(&frame, buf, sizeof(buf));
-    ASSERT_EQ_INT(4, encoded);
-
-    sw_frame_t decoded;
-    ASSERT_EQ_INT(0, sw_frame_decode(NULL, buf, encoded));
-    ASSERT_EQ_INT(0, sw_frame_decode(&decoded, NULL, encoded));
-    ASSERT_EQ_INT(0, sw_frame_decode(&decoded, buf, 3));
-
-    ASSERT_EQ_INT(1, sw_frame_decode(&decoded, buf, encoded));
-    ASSERT_EQ_INT(0x05, decoded.target_addr);
-    ASSERT_EQ_INT(0x01, decoded.protocol_id);
-    ASSERT_EQ_INT(0, decoded.payload_len);
-
+    /* NULL output buffer. */
+    ASSERT_EQ_INT(0, sw_spw_packet_build(dest, 1, cargo, 2, NULL, 8));
+    /* dest_len > 0 but dest NULL. */
+    ASSERT_EQ_INT(0, sw_spw_packet_build(NULL, 1, cargo, 2, buf, sizeof(buf)));
+    /* cargo_len > 0 but cargo NULL. */
+    ASSERT_EQ_INT(0, sw_spw_packet_build(dest, 1, NULL, 2, buf, sizeof(buf)));
+    /* Total length exceeds the buffer (1 + 2 > 2). */
+    ASSERT_EQ_INT(0, sw_spw_packet_build(dest, 1, cargo, 2, buf, sizeof(buf)));
+    /* Empty packet (no data characters). */
+    ASSERT_EQ_INT(0, sw_spw_packet_build(NULL, 0, NULL, 0, buf, sizeof(buf)));
     return 0;
 }
 
 test_result_t test_spacewire_frame_run_all(void)
 {
-    RUN_TEST(test_frame_encode_decode);
-    RUN_TEST(test_frame_crc_validation);
-    RUN_TEST(test_frame_size_calculation);
-    RUN_TEST(test_frame_invalid_args_and_minimal_frame);
+    RUN_TEST(test_packet_build_logical);
+    RUN_TEST(test_packet_build_path);
+    RUN_TEST(test_packet_build_cargo_only);
+    RUN_TEST(test_packet_build_errors);
     return (test_result_t){cunit_total_tests - cunit_overall_failures, cunit_total_tests};
 }
