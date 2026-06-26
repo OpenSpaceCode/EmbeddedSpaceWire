@@ -124,11 +124,11 @@ static int test_link_layer_state_helpers(void)
     return 0;
 }
 
-pus_test_result_t test_spacewire_router_run_all(void)
+test_result_t test_spacewire_router_run_all(void)
 {
     RUN_TEST(test_router_initialization);
     RUN_TEST(test_router_routing);
     RUN_TEST(test_router_error_paths_and_channels);
     RUN_TEST(test_link_layer_state_helpers);
-    return (pus_test_result_t){cunit_total_tests - cunit_overall_failures, cunit_total_tests};
+    return (test_result_t){cunit_total_tests - cunit_overall_failures, cunit_total_tests};
 }

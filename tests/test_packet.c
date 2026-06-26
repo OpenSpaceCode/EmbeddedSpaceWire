@@ -183,7 +183,7 @@ static int test_packet_create_null_buffer(void)
     return 0;
 }
 
-pus_test_result_t test_spacewire_packet_run_all(void)
+test_result_t test_spacewire_packet_run_all(void)
 {
     RUN_TEST(test_packet_encode_decode);
     RUN_TEST(test_packet_create_convenience);
@@ -191,5 +191,5 @@ pus_test_result_t test_spacewire_packet_run_all(void)
     RUN_TEST(test_packet_encode_error_paths);
     RUN_TEST(test_packet_decode_error_paths_and_stats);
     RUN_TEST(test_packet_create_null_buffer);
-    return (pus_test_result_t){cunit_total_tests - cunit_overall_failures, cunit_total_tests};
+    return (test_result_t){cunit_total_tests - cunit_overall_failures, cunit_total_tests};
 }

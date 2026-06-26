@@ -72,11 +72,11 @@ static int test_codec_special_chars_and_invalid_args(void)
     return 0;
 }
 
-pus_test_result_t test_spacewire_codec_run_all(void)
+test_result_t test_spacewire_codec_run_all(void)
 {
     RUN_TEST(test_encode_decode);
     RUN_TEST(test_parity_error);
     RUN_TEST(test_crc_computation);
     RUN_TEST(test_codec_special_chars_and_invalid_args);
-    return (pus_test_result_t){cunit_total_tests - cunit_overall_failures, cunit_total_tests};
+    return (test_result_t){cunit_total_tests - cunit_overall_failures, cunit_total_tests};
 }

@@ -97,11 +97,11 @@ static int test_frame_invalid_args_and_minimal_frame(void)
     return 0;
 }
 
-pus_test_result_t test_spacewire_frame_run_all(void)
+test_result_t test_spacewire_frame_run_all(void)
 {
     RUN_TEST(test_frame_encode_decode);
     RUN_TEST(test_frame_crc_validation);
     RUN_TEST(test_frame_size_calculation);
     RUN_TEST(test_frame_invalid_args_and_minimal_frame);
-    return (pus_test_result_t){cunit_total_tests - cunit_overall_failures, cunit_total_tests};
+    return (test_result_t){cunit_total_tests - cunit_overall_failures, cunit_total_tests};
 }

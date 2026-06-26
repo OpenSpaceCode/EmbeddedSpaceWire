@@ -6,7 +6,7 @@
 
 int main(void)
 {
-    pus_test_result_t r;
+    test_result_t r;
     int total_passed = 0;
     int total_tests = 0;
 
