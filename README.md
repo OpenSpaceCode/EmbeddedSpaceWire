@@ -1,12 +1,13 @@
 # EmbeddedSpaceWire
 
-Minimal, embedded-optimized implementation of **CCSDS Space Wire Protocol** combined with **CCSDS Space Packet Transfer** protocol, following standards.
+Minimal, embedded-optimized implementation of the **SpaceWire** packet and network layers (ECSS-E-ST-50-12C) carrying the **CCSDS Packet Transfer Protocol** (ECSS-E-ST-50-53C).
 
 ## Standards Compliance
 
-- **ECSS-E-ST-50-12C**: Space Wire Protocol Specification
-- **ECSS-E-ST-50-53C**: SpaceWire – CCSDS packet transfer protocol
-- **CCSDS 133.0-B-2**: CCSDS Space Packet
+- **ECSS-E-ST-50-12C** Rev.1: SpaceWire — links, nodes, routers and networks
+- **ECSS-E-ST-50-53C**: SpaceWire — CCSDS packet transfer protocol
+- **ECSS-E-ST-50-51C**: SpaceWire — protocol identification (Protocol ID `0x02`)
+- **CCSDS 133.0-B-2**: Space Packet Protocol
 
 ## Features
 
@@ -39,20 +40,22 @@ library as out-of-band metadata, not as bytes within packet buffers.
 ```
 EmbeddedSpaceWire/
 ├── include/
-│   ├── spacewire.h          # Core Space Wire protocol
-│   └── spacewire_packet.h   # CCSDS integration
+│   ├── spacewire.h          # SpaceWire packet + network (routing) layer
+│   └── spacewire_packet.h   # CCSDS packet transfer protocol (ECSS-E-ST-50-53C)
 ├── src/
-│   ├── spacewire_codec.c    # Character codec + CRC
-│   ├── spacewire_frame.c    # Frame layer
-│   ├── spacewire_router.c   # Router + link layer
-│   └── spacewire_packet.c   # CCSDS integration
+│   ├── spacewire_frame.c    # SpaceWire packet builder
+│   ├── spacewire_router.c   # Routing switch + link state
+│   └── spacewire_packet.c   # CCSDS packet transfer protocol
 ├── external/
-│   └── EmbeddedSpacePacket/ # CCSDS Space Packet library
+│   └── EmbeddedSpacePacket/ # CCSDS Space Packet library (submodule)
 ├── examples/
-│   └── main.c               # Example usage
+│   └── main.c               # End-to-end usage
 ├── tests/
 │   ├── cunit.h              # Tiny C test helpers
-│   └── unit_tests.c         # Unit tests
+│   ├── test_frame.c         # Packet-builder tests
+│   ├── test_router.c        # Routing + link tests
+│   ├── test_packet.c        # CCSDS PTP tests (+ golden wire vector)
+│   └── unit_tests.c         # Test runner
 ├── tools/
 │   └── coverage_html.sh     # HTML coverage generator
 ├── Makefile
@@ -106,34 +109,36 @@ make distclean  # Deep clean including object files
 
 ## Quick Start
 
-Look at the example/
+See [examples/main.c](examples/main.c).
 
 
-## Memory Usage (Estimated)
+## Memory Usage
 
-- **Library (stripped)**: ~4-5 KB
-- **Per-frame buffer**: Frame size + 4 bytes overhead
-- **Router state**: ~200 bytes base + 16 bytes per port
-- **Packet frame**: ~100 bytes (including CCSDS header)
+- **Library code**: ~3 KB (`.text`); no dynamic allocation, all buffers caller-owned
+- **`sw_packet_frame_t`**: 40 bytes (CCSDS PTP packet state)
+- **`sw_router_t`**: ~1.4 KB — a 256-entry routing table (3 B/entry) plus per-port
+  link state; set `-DSW_NUM_PORTS=n` to shrink the per-router footprint
 
 ## Limitations and Extensions
 
-Current implementation focuses on core protocol features:
+The library implements the packet and network layers; the following are out of
+scope or not yet implemented:
 
-- Single-destination routing (no path routing)
-- Flow control (basic credit-based)
-- CRC validation
-- No automatic retransmission handling
-- No bandwidth management
-- No advanced QoS features
+- Character/signal and data-link levels — provided by the SpaceWire hardware CODEC
+- Time-codes, broadcast codes and distributed interrupts (ECSS-E-ST-50-12C §5.6)
+- Group adaptive routing (one output port per logical address)
+- Guaranteed delivery — per ECSS-E-ST-50-53C the service is unconfirmed and
+  incomplete (no acknowledgement, retransmission or QoS)
 
-These can be extended as needed for specific mission requirements.
+These can be added as needed for specific mission requirements.
 
 ## References
 
-- CCSDS 131.0-B-2: Space Wire - Communication Protocol
-- ECSS-E-ST-50-53C: European Cooperation for Space Standardization
-- CCSDS 133.0-B-2: CCSDS Space Packet Protocol
+- ECSS-E-ST-50-12C Rev.1 — SpaceWire: links, nodes, routers and networks
+- ECSS-E-ST-50-53C — SpaceWire: CCSDS packet transfer protocol
+- ECSS-E-ST-50-51C — SpaceWire: protocol identification
+- CCSDS 133.0-B-2 — Space Packet Protocol
+- https://www.spacewire.esa.int — SpaceWire website
 
 ## License
 
