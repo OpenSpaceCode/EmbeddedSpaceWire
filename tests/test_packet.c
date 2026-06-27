@@ -148,6 +148,26 @@ static int test_packet_decode_bad_protocol_id(void)
     return 0;
 }
 
+/* Valid PTP header, but the CCSDS length field declares more data than is
+ * present, so the encapsulated CCSDS parse fails (clause 5.5.4.2). */
+static int test_packet_decode_malformed_ccsds(void)
+{
+    const uint8_t buf[11] = {
+        0x20, 0x02, 0x00, 0x05,             /* logical, proto=0x02, reserved=0, user_app */
+        0x10, 0x42, 0x00, 0x00, 0x00, 0x05, /* CCSDS hdr: length field 5 -> data_len 6 */
+        0xAA                                /* only 1 of the 6 declared data octets */
+    };
+
+    sw_packet_frame_t out;
+    sw_ptp_status_t status = SW_PTP_STATUS_OK;
+    int ok = sw_packet_decode(&out, buf, sizeof(buf), SW_END_EOP, &status);
+
+    ASSERT_EQ_INT(0, ok);
+    ASSERT_EQ_INT(SW_PTP_STATUS_INVALID, status);
+    ASSERT_TRUE(out.packet.data == NULL); /* cleared on discard */
+    return 0;
+}
+
 static int test_packet_init_defaults(void)
 {
     const sw_packet_config_t config = {
@@ -317,6 +337,7 @@ test_result_t test_spacewire_packet_run_all(void)
     RUN_TEST(test_packet_decode_eep_discarded);
     RUN_TEST(test_packet_decode_reserved_nonzero);
     RUN_TEST(test_packet_decode_bad_protocol_id);
+    RUN_TEST(test_packet_decode_malformed_ccsds);
     RUN_TEST(test_packet_init_defaults);
     RUN_TEST(test_packet_encode_error_paths);
     RUN_TEST(test_packet_decode_error_paths);

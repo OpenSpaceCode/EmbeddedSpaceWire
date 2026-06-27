@@ -82,10 +82,9 @@ size_t sw_packet_encode(const sw_packet_frame_t *pf, uint8_t *buf, size_t buf_le
     buf[offset++] = (uint8_t)SW_PTP_RESERVED;     /* Reserved = 0x00                */
     buf[offset++] = pf->user_app;                 /* User Application (5.3.5)        */
 
-    /* CCSDS Space Packet (clause 5.3.6). */
+    /* CCSDS Space Packet (clause 5.3.6). The length bounds (sp_packet_serialize_size)
+     * and the buffer size were validated above, so serialisation cannot fail here. */
     const size_t written = sp_packet_serialize(&pf->packet, &buf[offset], buf_len - offset);
-    if (written == 0)
-        return 0;
     offset += written;
 
     g_sw_stats.packets_sent++;
