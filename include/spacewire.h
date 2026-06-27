@@ -1,8 +1,19 @@
 /*
- * SpaceWire protocol — network, link and codec layers.
+ * SpaceWire — packet and network layers.
+ *
  * Minimal, embedded-optimized implementation following:
- * - ECSS-E-ST-50-12C Rev.1 (SpaceWire — links, nodes, routers and networks)
- * - ECSS-E-ST-50-53C (SpaceWire — CCSDS packet transfer protocol)
+ * - ECSS-E-ST-50-12C Rev.1 (SpaceWire — links, nodes, routers and networks):
+ *   the SpaceWire packet structure and routing (this file).
+ * - ECSS-E-ST-50-53C        (SpaceWire — CCSDS packet transfer protocol):
+ *   see spacewire_packet.h.
+ *
+ * Scope: this library implements the packet and network layers only. The
+ * character/signal and data-link levels — character encoding and parity,
+ * data-strobe (DS) signalling, link initialisation and flow control, and the
+ * generation/detection of the EOP/EEP end-of-packet markers — are provided by
+ * the SpaceWire hardware CODEC. EOP/EEP are therefore exchanged with this
+ * library as out-of-band metadata (see sw_end_marker_t in spacewire_packet.h),
+ * not as bytes within packet buffers.
  */
 
 #ifndef SPACEWIRE_H
@@ -10,48 +21,6 @@
 
 #include <stddef.h>
 #include <stdint.h>
-
-/* ============================================================================
- * SPACEWIRE CHARACTER CODEC
- * Space Wire encodes 9-bit data (8 data bits + parity) using special characters
- * ============================================================================ */
-
-/* Special characters in Space Wire */
-#define SPACEWIRE_ESC 0x00 /* Escape character (triggers character mapping) */
-#define SPACEWIRE_FCT 0x01 /* Flow Control Token */
-#define SPACEWIRE_EOP 0x02 /* End Of Packet */
-#define SPACEWIRE_EEP 0x03 /* End Of Error Packet */
-
-/* Escaped character mappings (ESC followed by code) */
-#define SPACEWIRE_ESC_ESC 0x00 /* Escaped ESC */
-#define SPACEWIRE_ESC_FCT 0x01 /* Escaped FCT */
-#define SPACEWIRE_ESC_EOP 0x02 /* Escaped EOP */
-#define SPACEWIRE_ESC_EEP 0x03 /* Escaped EEP */
-
-/* Parity types */
-typedef enum
-{
-    SW_PARITY_EVEN = 0,
-    SW_PARITY_ODD = 1
-} sw_parity_t;
-
-/* Character codec result */
-typedef enum
-{
-    SW_CHAR_OK = 0,
-    SW_CHAR_ESCAPE = 1, /* Special character */
-    SW_CHAR_FCT = 2,    /* Flow control token */
-    SW_CHAR_EOP = 3,    /* End of packet */
-    SW_CHAR_EEP = 4,    /* End of error packet */
-    SW_CHAR_PARITY_ERROR = 5,
-    SW_CHAR_INVALID = 6
-} sw_char_result_t;
-
-/* Decode single character (9-bit) from two bytes (8-bit + parity bit) */
-sw_char_result_t sw_decode_char(uint8_t byte, uint8_t parity_bit, uint8_t *data);
-
-/* Encode single character to byte + parity (returns parity bit) */
-uint8_t sw_encode_char(uint8_t data, uint8_t *byte);
 
 /* ============================================================================
  * SPACEWIRE PACKET (ECSS-E-ST-50-12C clause 5.6.2)
@@ -179,7 +148,10 @@ sw_route_result_t sw_router_route(sw_router_t *router,
 
 /* ============================================================================
  * SPACEWIRE LINK LAYER
- * Low-level link operations
+ *
+ * The link layer proper (encoding, flow control, link initialisation) is in the
+ * SpaceWire hardware CODEC. These types model the small amount of host-visible
+ * link configuration and state used to drive and observe that hardware.
  * ============================================================================ */
 
 /* Link configuration */
@@ -188,7 +160,7 @@ typedef struct
     uint32_t bit_rate;           /* bits per second */
     uint32_t disconnect_timeout; /* microseconds */
     uint8_t rx_credit_max;       /* max rx buffer credits */
-    uint8_t enable_crc;          /* 1 = enable CRC, 0 = disable */
+    uint8_t enable_crc;          /* optional HW link-level CRC: 1 = enable, 0 = disable */
 } sw_link_config_t;
 
 typedef struct
@@ -207,15 +179,5 @@ sw_link_state_t sw_link_get_state(const sw_link_layer_t *link);
 
 /* Update link state */
 void sw_link_set_state(sw_link_layer_t *link, sw_link_state_t state);
-
-/* ============================================================================
- * CRC UTILITIES (shared with Space Packet)
- * ============================================================================ */
-
-/* Compute CRC-16-CCITT (polynomial 0x1021, init 0xFFFF) */
-uint16_t sw_crc16(const uint8_t *data, size_t len);
-
-/* CRC table for faster computation */
-extern const uint16_t sw_crc16_table[256];
 
 #endif /* SPACEWIRE_H */

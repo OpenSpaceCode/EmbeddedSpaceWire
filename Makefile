@@ -13,8 +13,7 @@ LIB_DIR := $(BUILD_DIR)/lib
 BIN_DIR := $(BUILD_DIR)/bin
 
 # Source files
-CORE_SRCS := src/spacewire_codec.c \
-             src/spacewire_frame.c \
+CORE_SRCS := src/spacewire_frame.c \
              src/spacewire_router.c \
              src/spacewire_packet.c
 
@@ -22,7 +21,6 @@ ESP_SRCS := external/EmbeddedSpacePacket/src/space_packet.c
 
 EXAMPLE_SRCS := examples/main.c
 TEST_SRCS := tests/unit_tests.c \
-             tests/test_codec.c \
              tests/test_frame.c \
              tests/test_router.c \
              tests/test_packet.c

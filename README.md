@@ -12,19 +12,27 @@ Minimal, embedded-optimized implementation of **CCSDS Space Wire Protocol** comb
 
 ### Core Protocol Implementation
 
-- **Character Codec**: 9-bit character encoding with parity support
-- **Frame Layer**: Space Wire frame structure with CRC-16-CCITT
-- **Router**: Packet routing with virtual channel support
-- **Link Layer**: Link state management and flow control
-- **CCSDS Integration**: Combined Space Wire + Space Packet transmission
+- **Network layer**: SpaceWire packets and routing — path (0–31) and logical
+  (32–254) addressing with header deletion (ECSS-E-ST-50-12C §5.6)
+- **CCSDS Packet Transfer Protocol**: encapsulation/extraction of CCSDS Space
+  Packets with EOP/EEP receive status (ECSS-E-ST-50-53C)
+- **CCSDS Integration**: built on the EmbeddedSpacePacket library
+
+### Scope (hardware boundary)
+
+This is a **packet- and network-layer** library. The character/signal and
+data-link levels — character encoding and parity, data-strobe signalling, link
+initialisation and flow control, and EOP/EEP generation and detection — are
+provided by the **SpaceWire hardware CODEC**. EOP/EEP are exchanged with this
+library as out-of-band metadata, not as bytes within packet buffers.
 
 ### Design Principles
 
-- **Minimal footprint**: ~5KB library size (stripped)
-- **Zero allocation**: Stack-based, no dynamic memory
-- **Embedded-optimized**: No external dependencies except EmbeddedSpacePacket
-- **Portable**: Pure C99, big-endian network byte order
-- **Fast**: Lookup-table CRC computation
+- **Minimal footprint**: small static library, no dynamic allocation
+- **Zero allocation**: stack- and caller-owned buffers only
+- **Embedded-optimized**: no external dependencies except EmbeddedSpacePacket
+- **Portable**: pure C99, big-endian network byte order
+- **Standards-driven**: no non-standard framing or checksums on the wire
 
 ## Project Structure
 
@@ -161,18 +169,8 @@ if (sw_router_route_frame(&router, &frame, &out_port)) {
 
 ## API Reference
 
-### Character Codec
-
-```c
-// Decode 9-bit character
-sw_char_result_t sw_decode_char(uint8_t byte, uint8_t parity_bit, uint8_t *data);
-
-// Encode character with parity
-uint8_t sw_encode_char(uint8_t data, uint8_t *byte);
-
-// Compute CRC
-uint16_t sw_crc16(const uint8_t *data, size_t len);
-```
+> Note: the API reference below predates the Phase 1–3 refactor and is being
+> updated; see the headers in `include/` for the current signatures.
 
 ### Frame Layer
 

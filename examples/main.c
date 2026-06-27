@@ -1,5 +1,8 @@
 /*
- * EmbeddedSpaceWire Example - Basic packet transmission and routing
+ * EmbeddedSpaceWire example — SpaceWire packets, routing and CCSDS packet transfer.
+ *
+ * The character/signal and link levels are handled by the SpaceWire hardware
+ * CODEC; this example exercises the packet and network layers in software.
  */
 
 #include "spacewire.h"
@@ -11,25 +14,11 @@
 int main(void)
 {
     printf("===============================================\n");
-    printf("CCSDS Space Wire Protocol - Example\n");
+    printf("SpaceWire packet + network layer - Example\n");
     printf("===============================================\n\n");
 
-    /* ========== CHARACTER CODEC EXAMPLE ========== */
-    printf("[1] Character Codec Test\n");
-    printf("    Encoding/decoding 9-bit characters with parity\n");
-
-    uint8_t data = 0x42; /* 'B' */
-    uint8_t encoded;
-    uint8_t parity = sw_encode_char(data, &encoded);
-    printf("    Input: 0x%02X, Encoded: 0x%02X, Parity: %u\n", data, encoded, parity);
-
-    uint8_t decoded;
-    sw_char_result_t result = sw_decode_char(encoded, parity, &decoded);
-    printf("    Decoded: 0x%02X, Result: %d\n", decoded, result);
-    printf("    ✓ Character codec working\n\n");
-
     /* ========== SPACEWIRE PACKET (LOGICAL ADDRESSING) ========== */
-    printf("[2] SpaceWire Packet Test\n");
+    printf("[1] SpaceWire Packet Test\n");
     printf("    Building a logical-addressed packet (no CRC; EOP added by link)\n");
 
     uint8_t cargo_data[] = {0x01, 0x02, 0x03, 0x04, 0x05};
@@ -47,7 +36,7 @@ int main(void)
     printf("\n    ✓ Packet build working\n\n");
 
     /* ========== SPACEWIRE PACKET (PATH ADDRESSING) ========== */
-    printf("[3] SpaceWire Path Addressing Test\n");
+    printf("[2] SpaceWire Path Addressing Test\n");
     printf("    Building a multi-hop path-addressed packet\n");
 
     uint8_t path_dest[] = {2, 1, 3}; /* take port 2, then 1, then 3 */
@@ -62,9 +51,9 @@ int main(void)
     }
     printf("\n    ✓ Path-addressed packet built\n\n");
 
-    /* ========== CCSDS PACKET + SPACE WIRE INTEGRATION ========== */
-    printf("[4] CCSDS Packet + Space Wire Integration\n");
-    printf("    Creating complete packet frame\n");
+    /* ========== CCSDS PACKET + SPACEWIRE INTEGRATION ========== */
+    printf("[3] CCSDS Packet Transfer Protocol\n");
+    printf("    Encapsulating a CCSDS packet (ECSS-E-ST-50-53C)\n");
 
     sw_packet_config_t pkt_config = {.path = NULL,
                                      .path_len = 0,
@@ -92,8 +81,8 @@ int main(void)
     }
 
     /* ========== PACKET DECODING EXAMPLE ========== */
-    printf("[5] Packet Decoding Test\n");
-    printf("    Parsing Space Wire frame and CCSDS packet\n");
+    printf("[4] Packet Decoding Test\n");
+    printf("    Extracting the CCSDS packet at the target\n");
 
     sw_packet_frame_t decoded_pf;
     sw_ptp_status_t status;
@@ -114,8 +103,8 @@ int main(void)
     }
 
     /* ========== ROUTER EXAMPLE ========== */
-    printf("[6] Router Configuration Test\n");
-    printf("    Setting up routing table\n");
+    printf("[5] Router Configuration Test\n");
+    printf("    Setting up a routing table (port 0 = configuration port)\n");
 
     sw_router_t router;
     sw_router_init(&router, 4); /* ports 0..3 (port 0 = configuration port) */
@@ -130,7 +119,7 @@ int main(void)
     printf("    ✓ Router initialized\n\n");
 
     /* ========== ROUTING EXAMPLE ========== */
-    printf("[7] Packet Routing Test\n");
+    printf("[6] Packet Routing Test\n");
     printf("    Routing by leading destination-address character\n");
 
     uint8_t out_port = 0;
@@ -162,21 +151,8 @@ int main(void)
     }
     printf("    ✓ Routing successful\n\n");
 
-    /* ========== CRC TEST ========== */
-    printf("[8] CRC-16-CCITT Test\n");
-    printf("    Computing CRC for test data\n");
-
-    const uint8_t test_data[] = {0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39};
-    uint16_t crc = sw_crc16(test_data, sizeof(test_data));
-    printf("    Data: \"123456789\"\n");
-    printf("    CRC-16-CCITT: 0x%04X\n", crc);
-    if (crc == 0x31C3)
-    {
-        printf("    ✓ CRC matches expected value (0x31C3)\n\n");
-    }
-
     /* ========== STATISTICS ========== */
-    printf("[9] Statistics\n");
+    printf("[7] Statistics\n");
     sw_statistics_t stats;
     sw_get_statistics(&stats);
     printf("    Packets sent: %u\n", stats.packets_sent);

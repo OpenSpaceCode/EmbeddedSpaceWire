@@ -7,7 +7,6 @@ typedef struct
     int total;
 } test_result_t;
 
-test_result_t test_spacewire_codec_run_all(void);
 test_result_t test_spacewire_frame_run_all(void);
 test_result_t test_spacewire_router_run_all(void);
 test_result_t test_spacewire_packet_run_all(void);
