@@ -108,41 +108,37 @@ static void sw_packet_clear_payload(sw_packet_frame_t *pf)
     sp_packet_init(&pf->packet);
 }
 
+/* Discard a received packet: clear the delivered fields, count it, and report
+ * the status code (clause 5.5.4). Always returns 0; @p pf must be non-NULL. */
+static int sw_packet_discard(sw_packet_frame_t *pf, sw_ptp_status_t *status, sw_ptp_status_t code)
+{
+    sw_packet_clear_payload(pf);
+    g_sw_stats.packets_discarded++;
+    if (status)
+        *status = code;
+    return 0;
+}
+
 int sw_packet_decode(sw_packet_frame_t *pf,
                      const uint8_t *buf,
                      size_t buf_len,
                      sw_end_marker_t end,
                      sw_ptp_status_t *status)
 {
-    sw_ptp_status_t st = SW_PTP_STATUS_INVALID;
-
     if (!pf || !buf)
     {
         if (status)
-            *status = st;
+            *status = SW_PTP_STATUS_INVALID;
         return 0;
     }
 
     /* clause 5.5.4.4: a packet terminated by EEP shall be discarded. */
     if (end == SW_END_EEP)
-    {
-        st = SW_PTP_STATUS_EEP;
-        sw_packet_clear_payload(pf);
-        g_sw_stats.packets_discarded++;
-        if (status)
-            *status = st;
-        return 0;
-    }
+        return sw_packet_discard(pf, status, SW_PTP_STATUS_EEP);
 
     /* Need the encapsulation header plus a minimal CCSDS packet. */
     if (buf_len < (size_t)SW_PTP_HEADER_LEN + SW_PTP_CCSDS_MIN_LEN)
-    {
-        sw_packet_clear_payload(pf);
-        g_sw_stats.packets_discarded++;
-        if (status)
-            *status = st; /* SW_PTP_STATUS_INVALID */
-        return 0;
-    }
+        return sw_packet_discard(pf, status, SW_PTP_STATUS_INVALID);
 
     uint8_t logical = buf[0];
     uint8_t proto = buf[1];
@@ -151,34 +147,15 @@ int sw_packet_decode(sw_packet_frame_t *pf,
 
     /* clause 5.5.4.1: only Protocol Identifier 0x02 is a CCSDS PTP packet. */
     if (proto != SW_PTP_PROTOCOL_ID)
-    {
-        sw_packet_clear_payload(pf);
-        g_sw_stats.packets_discarded++;
-        if (status)
-            *status = st; /* SW_PTP_STATUS_INVALID */
-        return 0;
-    }
+        return sw_packet_discard(pf, status, SW_PTP_STATUS_INVALID);
 
     /* clause 5.5.4.3: Reserved field non-zero -> discard, packet/user app null. */
     if (reserved != SW_PTP_RESERVED)
-    {
-        st = SW_PTP_STATUS_RESERVED_NONZERO;
-        sw_packet_clear_payload(pf);
-        g_sw_stats.packets_discarded++;
-        if (status)
-            *status = st;
-        return 0;
-    }
+        return sw_packet_discard(pf, status, SW_PTP_STATUS_RESERVED_NONZERO);
 
     /* clause 5.5.4.2: extract the CCSDS packet and User Application value. */
     if (!sp_packet_parse(&pf->packet, &buf[SW_PTP_HEADER_LEN], buf_len - SW_PTP_HEADER_LEN))
-    {
-        sw_packet_clear_payload(pf);
-        g_sw_stats.packets_discarded++;
-        if (status)
-            *status = SW_PTP_STATUS_INVALID;
-        return 0;
-    }
+        return sw_packet_discard(pf, status, SW_PTP_STATUS_INVALID);
 
     pf->path = NULL;
     pf->path_len = 0;

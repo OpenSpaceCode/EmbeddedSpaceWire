@@ -58,6 +58,15 @@ int sw_router_add_route(sw_router_t *router,
  * ROUTING DECISION
  * ============================================================================ */
 
+/* Discard a packet whose leading address references a non-existent port or an
+ * unconfigured routing-table entry (clause 5.6.8.5). Returns SW_ROUTE_DISCARD. */
+static sw_route_result_t sw_router_invalid_address(sw_router_t *router)
+{
+    router->invalid_address_errors++;
+    router->packets_discarded++;
+    return SW_ROUTE_DISCARD;
+}
+
 sw_route_result_t sw_router_route(sw_router_t *router,
                                   const uint8_t *packet,
                                   size_t len,
@@ -82,11 +91,7 @@ sw_route_result_t sw_router_route(sw_router_t *router,
     {
         /* Path addressing (clause 5.6.8.3): the character names the output port. */
         if (lead >= router->num_ports)
-        {
-            router->invalid_address_errors++;
-            router->packets_discarded++;
-            return SW_ROUTE_DISCARD;
-        }
+            return sw_router_invalid_address(router);
         *output_port = lead;
         *delete_leading = 1; /* a path address is always deleted (Table 5-11) */
         router->packets_routed++;
@@ -99,11 +104,7 @@ sw_route_result_t sw_router_route(sw_router_t *router,
      * (clause 5.6.8.5). */
     const sw_route_entry_t *entry = &router->routes[lead];
     if (!entry->configured || entry->output_port >= router->num_ports)
-    {
-        router->invalid_address_errors++;
-        router->packets_discarded++;
-        return SW_ROUTE_DISCARD;
-    }
+        return sw_router_invalid_address(router);
 
     *output_port = entry->output_port;
     *delete_leading = entry->delete_addr ? 1u : 0u; /* clause 5.6.8.6 */
