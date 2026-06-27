@@ -59,11 +59,11 @@ size_t sw_packet_encode(const sw_packet_frame_t *pf, uint8_t *buf, size_t buf_le
     }
 
     /* CCSDS packet length must be within bounds (clause 5.1.2). */
-    size_t ccsds_len = sp_packet_serialize_size(&pf->packet);
+    const size_t ccsds_len = sp_packet_serialize_size(&pf->packet);
     if (ccsds_len < SW_PTP_CCSDS_MIN_LEN || ccsds_len > SW_PTP_CCSDS_MAX_LEN)
         return 0;
 
-    size_t total = (size_t)pf->path_len + SW_PTP_HEADER_LEN + ccsds_len;
+    const size_t total = (size_t)pf->path_len + SW_PTP_HEADER_LEN + ccsds_len;
     if (buf_len < total)
         return 0;
 
@@ -83,7 +83,7 @@ size_t sw_packet_encode(const sw_packet_frame_t *pf, uint8_t *buf, size_t buf_le
     buf[offset++] = pf->user_app;                 /* User Application (5.3.5)        */
 
     /* CCSDS Space Packet (clause 5.3.6). */
-    size_t written = sp_packet_serialize(&pf->packet, &buf[offset], buf_len - offset);
+    const size_t written = sp_packet_serialize(&pf->packet, &buf[offset], buf_len - offset);
     if (written == 0)
         return 0;
     offset += written;
@@ -140,10 +140,10 @@ int sw_packet_decode(sw_packet_frame_t *pf,
     if (buf_len < (size_t)SW_PTP_HEADER_LEN + SW_PTP_CCSDS_MIN_LEN)
         return sw_packet_discard(pf, status, SW_PTP_STATUS_INVALID);
 
-    uint8_t logical = buf[0];
-    uint8_t proto = buf[1];
-    uint8_t reserved = buf[2];
-    uint8_t user_app = buf[3];
+    const uint8_t logical = buf[0];
+    const uint8_t proto = buf[1];
+    const uint8_t reserved = buf[2];
+    const uint8_t user_app = buf[3];
 
     /* clause 5.5.4.1: only Protocol Identifier 0x02 is a CCSDS PTP packet. */
     if (proto != SW_PTP_PROTOCOL_ID)
@@ -185,7 +185,7 @@ size_t sw_packet_create(uint8_t logical_addr,
     if (!buf)
         return 0;
 
-    sw_packet_config_t config = {
+    const sw_packet_config_t config = {
         .path = NULL, .path_len = 0, .logical_addr = logical_addr, .user_app = user_app};
 
     sw_packet_frame_t pf;

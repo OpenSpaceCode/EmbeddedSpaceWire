@@ -32,19 +32,19 @@ static int test_router_path_addressing(void)
     uint8_t del = 0xFF;
 
     /* Leading char 3 -> output port 3, always deleted (clause 5.6.8.3). */
-    uint8_t pkt[3] = {3, 0xAA, 0xBB};
+    const uint8_t pkt[3] = {3, 0xAA, 0xBB};
     ASSERT_EQ_INT(SW_ROUTE_OK, sw_router_route(&router, pkt, sizeof(pkt), &port, &del));
     ASSERT_EQ_INT(3, port);
     ASSERT_EQ_INT(1, del);
 
     /* Leading char 0 -> configuration port. */
-    uint8_t cfg[2] = {0, 0x11};
+    const uint8_t cfg[2] = {0, 0x11};
     ASSERT_EQ_INT(SW_ROUTE_OK, sw_router_route(&router, cfg, sizeof(cfg), &port, &del));
     ASSERT_EQ_INT(SW_PORT_CONFIG, port);
     ASSERT_EQ_INT(1, del);
 
     /* A path char referencing a non-existent port is discarded (clause 5.6.8.5). */
-    uint8_t bad[2] = {20, 0x11};
+    const uint8_t bad[2] = {20, 0x11};
     ASSERT_EQ_INT(SW_ROUTE_DISCARD, sw_router_route(&router, bad, sizeof(bad), &port, &del));
     ASSERT_EQ_INT(1, (int)router.invalid_address_errors);
     return 0;
@@ -62,23 +62,23 @@ static int test_router_logical_addressing(void)
     uint8_t del = 0xFF;
 
     /* Logical address retained by default (clause 5.6.8.4 f). */
-    uint8_t p1[2] = {0x40, 0x99};
+    const uint8_t p1[2] = {0x40, 0x99};
     ASSERT_EQ_INT(SW_ROUTE_OK, sw_router_route(&router, p1, sizeof(p1), &port, &del));
     ASSERT_EQ_INT(5, port);
     ASSERT_EQ_INT(0, del);
 
     /* Logical address deleted when configured to (clause 5.6.8.6). */
-    uint8_t p2[2] = {0x41, 0x99};
+    const uint8_t p2[2] = {0x41, 0x99};
     ASSERT_EQ_INT(SW_ROUTE_OK, sw_router_route(&router, p2, sizeof(p2), &port, &del));
     ASSERT_EQ_INT(6, port);
     ASSERT_EQ_INT(1, del);
 
     /* Unconfigured logical address -> discard + error. */
-    uint8_t p3[2] = {0x77, 0x99};
+    const uint8_t p3[2] = {0x77, 0x99};
     ASSERT_EQ_INT(SW_ROUTE_DISCARD, sw_router_route(&router, p3, sizeof(p3), &port, &del));
 
     /* Reserved logical address 255 -> discard + error (clause 5.6.8.5 NOTE). */
-    uint8_t p4[2] = {0xFF, 0x99};
+    const uint8_t p4[2] = {0xFF, 0x99};
     ASSERT_EQ_INT(SW_ROUTE_DISCARD, sw_router_route(&router, p4, sizeof(p4), &port, &del));
     ASSERT_EQ_INT(2, (int)router.invalid_address_errors);
     return 0;
@@ -107,7 +107,7 @@ static int test_router_route_invalid_args_and_empty(void)
     sw_router_t router;
     sw_router_init(&router, 4);
 
-    uint8_t pkt[2] = {0x40, 0x00};
+    const uint8_t pkt[2] = {0x40, 0x00};
     uint8_t port = 0;
     uint8_t del = 0;
 
@@ -126,7 +126,7 @@ static int test_router_route_invalid_args_and_empty(void)
 
 static int test_link_layer_state_helpers(void)
 {
-    sw_link_config_t config = {
+    const sw_link_config_t config = {
         .bit_rate = 1000000,
         .disconnect_timeout = 2500,
         .rx_credit_max = 12,

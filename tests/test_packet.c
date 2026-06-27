@@ -8,7 +8,7 @@
 /* Build a representative packet: logical addressing, no path. */
 static void make_sample(sw_packet_frame_t *pf, const uint8_t *data, uint16_t data_len)
 {
-    sw_packet_config_t config = {
+    const sw_packet_config_t config = {
         .path = NULL, .path_len = 0, .logical_addr = 0x20, .user_app = 0x05};
     sw_packet_init(pf, &config);
     pf->packet.ph.apid = 0x0042;
@@ -150,7 +150,7 @@ static int test_packet_decode_bad_protocol_id(void)
 
 static int test_packet_init_defaults(void)
 {
-    sw_packet_config_t config = {
+    const sw_packet_config_t config = {
         .path = NULL, .path_len = 0, .logical_addr = 0x55, .user_app = 0x99};
 
     sw_packet_frame_t pf;
@@ -210,7 +210,7 @@ static int test_packet_encode_error_paths(void)
 
 static int test_packet_decode_error_paths(void)
 {
-    uint8_t buf[16] = {0};
+    const uint8_t buf[16] = {0};
     sw_packet_frame_t out;
     sw_ptp_status_t status = SW_PTP_STATUS_OK;
 
@@ -233,7 +233,7 @@ static int test_packet_decode_error_paths(void)
 
 static int test_packet_create_convenience(void)
 {
-    uint8_t payload[3] = {0x11, 0x22, 0x33};
+    const uint8_t payload[3] = {0x11, 0x22, 0x33};
     uint8_t buf[64];
 
     size_t n = sw_packet_create(0xFE, 0x07, 0x0042, payload, sizeof(payload), buf, sizeof(buf));

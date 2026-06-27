@@ -24,7 +24,7 @@ size_t sw_spw_packet_build(const uint8_t *dest,
     if (cargo_len > 0 && !cargo)
         return 0;
 
-    size_t total = dest_len + cargo_len;
+    const size_t total = dest_len + cargo_len;
     if (total == 0 || total > buf_len)
         return 0;
 

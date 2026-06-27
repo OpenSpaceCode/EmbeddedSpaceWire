@@ -7,8 +7,8 @@
 /* A logical-addressed packet: one address octet followed by the cargo. */
 static int test_packet_build_logical(void)
 {
-    uint8_t dest[1] = {0x40};
-    uint8_t cargo[3] = {0xAA, 0xBB, 0xCC};
+    const uint8_t dest[1] = {0x40};
+    const uint8_t cargo[3] = {0xAA, 0xBB, 0xCC};
     uint8_t buf[16];
 
     size_t n = sw_spw_packet_build(dest, sizeof(dest), cargo, sizeof(cargo), buf, sizeof(buf));
@@ -22,8 +22,8 @@ static int test_packet_build_logical(void)
 /* A path-addressed packet: a multi-hop path address followed by the cargo. */
 static int test_packet_build_path(void)
 {
-    uint8_t dest[3] = {2, 1, 3};
-    uint8_t cargo[2] = {0xDE, 0xAD};
+    const uint8_t dest[3] = {2, 1, 3};
+    const uint8_t cargo[2] = {0xDE, 0xAD};
     uint8_t buf[16];
 
     size_t n = sw_spw_packet_build(dest, sizeof(dest), cargo, sizeof(cargo), buf, sizeof(buf));
@@ -37,7 +37,7 @@ static int test_packet_build_path(void)
 /* A point-to-point link needs no destination address (clause 4.2.3.3). */
 static int test_packet_build_cargo_only(void)
 {
-    uint8_t cargo[2] = {0x11, 0x22};
+    const uint8_t cargo[2] = {0x11, 0x22};
     uint8_t buf[8];
 
     size_t n = sw_spw_packet_build(NULL, 0, cargo, sizeof(cargo), buf, sizeof(buf));
@@ -48,8 +48,8 @@ static int test_packet_build_cargo_only(void)
 
 static int test_packet_build_errors(void)
 {
-    uint8_t dest[1] = {0x40};
-    uint8_t cargo[2] = {0x11, 0x22};
+    const uint8_t dest[1] = {0x40};
+    const uint8_t cargo[2] = {0x11, 0x22};
     uint8_t buf[2];
 
     /* NULL output buffer. */

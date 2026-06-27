@@ -21,8 +21,8 @@ int main(void)
     printf("[1] SpaceWire Packet Test\n");
     printf("    Building a logical-addressed packet (no CRC; EOP added by link)\n");
 
-    uint8_t cargo_data[] = {0x01, 0x02, 0x03, 0x04, 0x05};
-    uint8_t logical_dest[] = {0x40}; /* logical address 64 */
+    const uint8_t cargo_data[] = {0x01, 0x02, 0x03, 0x04, 0x05};
+    const uint8_t logical_dest[] = {0x40}; /* logical address 64 */
 
     uint8_t spw_buf[256];
     size_t spw_len = sw_spw_packet_build(logical_dest, sizeof(logical_dest), cargo_data,
@@ -39,7 +39,7 @@ int main(void)
     printf("[2] SpaceWire Path Addressing Test\n");
     printf("    Building a multi-hop path-addressed packet\n");
 
-    uint8_t path_dest[] = {2, 1, 3}; /* take port 2, then 1, then 3 */
+    const uint8_t path_dest[] = {2, 1, 3}; /* take port 2, then 1, then 3 */
     uint8_t path_buf[256];
     size_t path_len = sw_spw_packet_build(path_dest, sizeof(path_dest), cargo_data,
                                           sizeof(cargo_data), path_buf, sizeof(path_buf));
@@ -126,7 +126,7 @@ int main(void)
     uint8_t delete_leading = 0;
 
     /* Logical addressing: leading char 0x40 is looked up in the routing table. */
-    uint8_t logical_pkt[] = {0x40, 0xAA, 0xBB};
+    const uint8_t logical_pkt[] = {0x40, 0xAA, 0xBB};
     if (sw_router_route(&router, logical_pkt, sizeof(logical_pkt), &out_port, &delete_leading) ==
         SW_ROUTE_OK)
     {
@@ -134,7 +134,7 @@ int main(void)
     }
 
     /* Path addressing: leading char 2 selects port 2 directly and is deleted. */
-    uint8_t path_pkt[] = {2, 0xAA, 0xBB};
+    const uint8_t path_pkt[] = {2, 0xAA, 0xBB};
     if (sw_router_route(&router, path_pkt, sizeof(path_pkt), &out_port, &delete_leading) ==
         SW_ROUTE_OK)
     {
@@ -142,7 +142,7 @@ int main(void)
     }
 
     /* An unconfigured logical address is discarded with an invalid-address error. */
-    uint8_t bad_pkt[] = {0x77, 0xAA};
+    const uint8_t bad_pkt[] = {0x77, 0xAA};
     if (sw_router_route(&router, bad_pkt, sizeof(bad_pkt), &out_port, &delete_leading) ==
         SW_ROUTE_DISCARD)
     {

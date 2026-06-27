@@ -85,7 +85,7 @@ sw_route_result_t sw_router_route(sw_router_t *router,
         return SW_ROUTE_DISCARD;
     }
 
-    uint8_t lead = packet[0];
+    const uint8_t lead = packet[0];
 
     if (lead <= SW_PATH_ADDR_MAX)
     {
