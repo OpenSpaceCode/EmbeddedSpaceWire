@@ -32,6 +32,7 @@ void sw_packet_init(sw_packet_frame_t *pf, const sw_packet_config_t *config)
     pf->user_app = config->user_app;
 
     sp_packet_init(&pf->packet);
+
     pf->packet.ph.version = 0;
     pf->packet.ph.type = SP_PACKET_TYPE_TC; /* default Packet Type (CCSDS: TM=0, TC=1) */
     pf->packet.ph.sec_hdr_flag = 0;
@@ -53,6 +54,7 @@ size_t sw_packet_encode(const sw_packet_frame_t *pf, uint8_t *buf, size_t buf_le
     /* Path octets must be valid SpaceWire path addresses (0..31). */
     if (pf->path_len > 0 && pf->path == NULL)
         return 0;
+
     for (uint8_t i = 0; i < pf->path_len; i++)
     {
         if (pf->path[i] > SW_PTP_PATH_OCTET_MAX)
@@ -78,10 +80,10 @@ size_t sw_packet_encode(const sw_packet_frame_t *pf, uint8_t *buf, size_t buf_le
     }
 
     /* Encapsulation header (clause 5.4.1). */
-    buf[offset++] = pf->logical_addr;             /* Target Logical Address (5.3.2) */
-    buf[offset++] = (uint8_t)SW_PTP_PROTOCOL_ID;  /* Protocol Identifier = 0x02     */
-    buf[offset++] = (uint8_t)SW_PTP_RESERVED;     /* Reserved = 0x00                */
-    buf[offset++] = pf->user_app;                 /* User Application (5.3.5)        */
+    buf[offset++] = pf->logical_addr;            /* Target Logical Address (5.3.2) */
+    buf[offset++] = (uint8_t)SW_PTP_PROTOCOL_ID; /* Protocol Identifier = 0x02     */
+    buf[offset++] = (uint8_t)SW_PTP_RESERVED;    /* Reserved = 0x00                */
+    buf[offset++] = pf->user_app;                /* User Application (5.3.5)        */
 
     /* CCSDS Space Packet (clause 5.3.6). The length bounds (sp_packet_serialize_size)
      * and the buffer size were validated above, so serialisation cannot fail here. */
@@ -108,6 +110,7 @@ static void sw_packet_clear_payload(sw_packet_frame_t *pf)
     pf->path_len = 0;
     pf->logical_addr = 0;
     pf->user_app = 0;
+
     sp_packet_init(&pf->packet);
 }
 
@@ -123,8 +126,10 @@ static int sw_packet_discard(sw_packet_frame_t *pf, sw_ptp_status_t *status, sw_
 {
     sw_packet_clear_payload(pf);
     g_sw_stats.packets_discarded++;
+
     if (status)
         *status = code;
+
     return 0;
 }
 
@@ -138,6 +143,7 @@ int sw_packet_decode(sw_packet_frame_t *pf,
     {
         if (status)
             *status = SW_PTP_STATUS_INVALID;
+
         return 0;
     }
 
@@ -176,6 +182,7 @@ int sw_packet_decode(sw_packet_frame_t *pf,
 
     if (status)
         *status = SW_PTP_STATUS_OK;
+
     return 1;
 }
 
@@ -194,8 +201,10 @@ size_t sw_packet_create(uint8_t logical_addr,
     if (!buf)
         return 0;
 
-    const sw_packet_config_t config = {
-        .path = NULL, .path_len = 0, .logical_addr = logical_addr, .user_app = user_app};
+    const sw_packet_config_t config = {.path = NULL,
+                                       .path_len = 0,
+                                       .logical_addr = logical_addr,
+                                       .user_app = user_app};
 
     sw_packet_frame_t pf;
     sw_packet_init(&pf, &config);
@@ -215,6 +224,7 @@ void sw_get_statistics(sw_statistics_t *stats)
 {
     if (!stats)
         return;
+
     *stats = g_sw_stats;
 }
 

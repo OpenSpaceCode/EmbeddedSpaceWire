@@ -26,8 +26,12 @@ int main(void)
     const uint8_t logical_dest[] = {0x40}; /* logical address 64 */
 
     uint8_t spw_buf[256];
-    size_t spw_len = sw_spw_packet_build(logical_dest, sizeof(logical_dest), cargo_data,
-                                         sizeof(cargo_data), spw_buf, sizeof(spw_buf));
+    size_t spw_len = sw_spw_packet_build(logical_dest,
+                                         sizeof(logical_dest),
+                                         cargo_data,
+                                         sizeof(cargo_data),
+                                         spw_buf,
+                                         sizeof(spw_buf));
     printf("    Packet size: %zu bytes\n", spw_len);
     printf("    Packet data (hex): ");
     for (size_t i = 0; i < spw_len; i++)
@@ -42,8 +46,12 @@ int main(void)
 
     const uint8_t path_dest[] = {2, 1, 3}; /* take port 2, then 1, then 3 */
     uint8_t path_buf[256];
-    size_t path_len = sw_spw_packet_build(path_dest, sizeof(path_dest), cargo_data,
-                                          sizeof(cargo_data), path_buf, sizeof(path_buf));
+    size_t path_len = sw_spw_packet_build(path_dest,
+                                          sizeof(path_dest),
+                                          cargo_data,
+                                          sizeof(cargo_data),
+                                          path_buf,
+                                          sizeof(path_buf));
     printf("    Path address: %u hops, packet %zu bytes\n", (unsigned)sizeof(path_dest), path_len);
     printf("    Packet data (hex): ");
     for (size_t i = 0; i < path_len; i++)

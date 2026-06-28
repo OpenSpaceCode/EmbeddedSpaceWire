@@ -39,7 +39,8 @@
 /** @brief Minimum CCSDS packet length: 6-octet primary header + 1 data octet (clause 5.1.2). */
 #define SW_PTP_CCSDS_MIN_LEN 7u
 
-/** @brief Maximum CCSDS packet length: 6-octet primary header + 65536 data octets (clause 5.1.2). */
+/** @brief Maximum CCSDS packet length: 6-octet primary header + 65536 data octets (clause 5.1.2).
+ */
 #define SW_PTP_CCSDS_MAX_LEN 65542u
 
 /**
@@ -99,8 +100,8 @@ typedef struct
     const uint8_t *path;  /**< Target SpaceWire (path) Address; NULL if unused (clause 5.3.1). */
     uint8_t path_len;     /**< Number of path octets (each must be 0..31). */
     uint8_t logical_addr; /**< Target Logical Address (clause 5.3.2). */
-    uint8_t user_app;     /**< User Application field; may carry a virtual channel (clause 5.3.5). */
-    sp_packet_t packet;   /**< Encapsulated CCSDS Space Packet. */
+    uint8_t user_app;   /**< User Application field; may carry a virtual channel (clause 5.3.5). */
+    sp_packet_t packet; /**< Encapsulated CCSDS Space Packet. */
 } sw_packet_frame_t;
 
 /**

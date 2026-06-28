@@ -20,8 +20,10 @@ size_t sw_spw_packet_build(const uint8_t *dest,
 {
     if (!buf)
         return 0;
+
     if (dest_len > 0 && !dest)
         return 0;
+
     if (cargo_len > 0 && !cargo)
         return 0;
 
@@ -31,6 +33,7 @@ size_t sw_spw_packet_build(const uint8_t *dest,
 
     if (dest_len > 0)
         memcpy(buf, dest, dest_len);
+
     if (cargo_len > 0)
         memcpy(&buf[dest_len], cargo, cargo_len);
 

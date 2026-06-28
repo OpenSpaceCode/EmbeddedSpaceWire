@@ -69,7 +69,7 @@ size_t sw_spw_packet_build(const uint8_t *dest,
  * nodes.
  */
 #ifndef SW_NUM_PORTS
-#define SW_NUM_PORTS 32u
+#    define SW_NUM_PORTS 32u
 #endif
 
 /** @brief Largest path-address character; 0..31 select an output port (clause 5.6.8.3). */
@@ -128,10 +128,10 @@ typedef struct
 {
     sw_link_t links[SW_NUM_PORTS];                /**< Per-port link state. */
     sw_route_entry_t routes[SW_ROUTE_TABLE_SIZE]; /**< Logical-address routing table. */
-    uint8_t num_ports;               /**< Ports present (port 0 = config). */
-    uint32_t invalid_address_errors; /**< Invalid-address discards (clause 5.6.8.5). */
-    uint32_t packets_routed;         /**< Packets successfully routed. */
-    uint32_t packets_discarded;      /**< Packets discarded. */
+    uint8_t num_ports;                            /**< Ports present (port 0 = config). */
+    uint32_t invalid_address_errors;              /**< Invalid-address discards (clause 5.6.8.5). */
+    uint32_t packets_routed;                      /**< Packets successfully routed. */
+    uint32_t packets_discarded;                   /**< Packets discarded. */
 } sw_router_t;
 
 /**

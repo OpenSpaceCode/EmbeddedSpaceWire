@@ -20,8 +20,10 @@ void sw_router_init(sw_router_t *router, uint8_t num_ports)
 
     if (num_ports == 0)
         num_ports = 1;
+
     if (num_ports > SW_NUM_PORTS)
         num_ports = SW_NUM_PORTS;
+
     router->num_ports = num_ports;
 
     for (uint8_t i = 0; i < router->num_ports; i++)
@@ -46,12 +48,14 @@ int sw_router_add_route(sw_router_t *router,
     /* Only logical addresses 32..254 are configurable (clause 5.6.8.4). */
     if (logical_addr < SW_LOGICAL_ADDR_MIN || logical_addr == SW_LOGICAL_ADDR_RESERVED)
         return 0;
+
     if (output_port >= router->num_ports)
         return 0;
 
     router->routes[logical_addr].output_port = output_port;
     router->routes[logical_addr].configured = 1;
     router->routes[logical_addr].delete_addr = delete_addr ? 1u : 0u;
+
     return 1;
 }
 
@@ -69,6 +73,7 @@ static sw_route_result_t sw_router_invalid_address(sw_router_t *router)
 {
     router->invalid_address_errors++;
     router->packets_discarded++;
+
     return SW_ROUTE_DISCARD;
 }
 
@@ -97,9 +102,11 @@ sw_route_result_t sw_router_route(sw_router_t *router,
         /* Path addressing (clause 5.6.8.3): the character names the output port. */
         if (lead >= router->num_ports)
             return sw_router_invalid_address(router);
+
         *output_port = lead;
         *delete_leading = 1; /* a path address is always deleted (Table 5-11) */
         router->packets_routed++;
+
         return SW_ROUTE_OK;
     }
 
@@ -108,12 +115,14 @@ sw_route_result_t sw_router_route(sw_router_t *router,
      * maps to a non-existent port is discarded with an invalid-address error
      * (clause 5.6.8.5). */
     const sw_route_entry_t *entry = &router->routes[lead];
+
     if (!entry->configured || entry->output_port >= router->num_ports)
         return sw_router_invalid_address(router);
 
     *output_port = entry->output_port;
     *delete_leading = entry->delete_addr ? 1u : 0u; /* clause 5.6.8.6 */
     router->packets_routed++;
+
     return SW_ROUTE_OK;
 }
 
@@ -136,6 +145,7 @@ sw_link_state_t sw_link_get_state(const sw_link_layer_t *link)
 {
     if (!link)
         return SW_LINK_ERROR;
+
     return link->state;
 }
 
@@ -143,5 +153,6 @@ void sw_link_set_state(sw_link_layer_t *link, sw_link_state_t state)
 {
     if (!link)
         return;
+
     link->state = state;
 }
