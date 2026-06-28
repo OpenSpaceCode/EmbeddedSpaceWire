@@ -1,5 +1,6 @@
-/*
- * CCSDS Packet Transfer Protocol over SpaceWire (ECSS-E-ST-50-53C).
+/**
+ * @file spacewire_packet.c
+ * @brief CCSDS Packet Transfer Protocol over SpaceWire (ECSS-E-ST-50-53C).
  *
  * Encapsulates a CCSDS Space Packet into a SpaceWire packet on the send path
  * and extracts it on the receive path. No checksum is added: ECSS-E-ST-50-53C
@@ -97,7 +98,10 @@ size_t sw_packet_encode(const sw_packet_frame_t *pf, uint8_t *buf, size_t buf_le
  * PACKET DECODING (clause 5.5.4)
  * ============================================================================ */
 
-/* Clear the delivered packet/user-application fields (clause 5.2.3.2 b). */
+/**
+ * @brief Clear the delivered packet/user-application fields (clause 5.2.3.2 b).
+ * @param[out] pf Packet frame to clear.
+ */
 static void sw_packet_clear_payload(sw_packet_frame_t *pf)
 {
     pf->path = NULL;
@@ -107,8 +111,14 @@ static void sw_packet_clear_payload(sw_packet_frame_t *pf)
     sp_packet_init(&pf->packet);
 }
 
-/* Discard a received packet: clear the delivered fields, count it, and report
- * the status code (clause 5.5.4). Always returns 0; @p pf must be non-NULL. */
+/**
+ * @brief Discard a received packet: clear the delivered fields, count it, and
+ *        report the status code (clause 5.5.4).
+ * @param[out] pf     Packet frame; must be non-NULL.
+ * @param[out] status Receive-status output; may be NULL.
+ * @param[in]  code   Status code to report.
+ * @return Always 0.
+ */
 static int sw_packet_discard(sw_packet_frame_t *pf, sw_ptp_status_t *status, sw_ptp_status_t code)
 {
     sw_packet_clear_payload(pf);

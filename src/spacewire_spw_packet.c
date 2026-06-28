@@ -1,5 +1,6 @@
-/*
- * SpaceWire packet helpers (ECSS-E-ST-50-12C clause 5.6.2).
+/**
+ * @file spacewire_spw_packet.c
+ * @brief SpaceWire packet builder (ECSS-E-ST-50-12C clause 5.6.2).
  *
  * A SpaceWire packet is [destination address][cargo] terminated by an EOP/EEP
  * marker. The marker is a link-layer control character and is not part of the

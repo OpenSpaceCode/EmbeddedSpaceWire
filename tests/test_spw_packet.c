@@ -1,3 +1,7 @@
+/**
+ * @file test_spw_packet.c
+ * @brief Unit tests for the SpaceWire packet builder (sw_spw_packet_build()).
+ */
 #include "cunit.h"
 #include "spacewire.h"
 #include "test_runners.h"
@@ -65,7 +69,7 @@ static int test_packet_build_errors(void)
     return 0;
 }
 
-test_result_t test_spacewire_frame_run_all(void)
+test_result_t test_spacewire_spw_packet_run_all(void)
 {
     RUN_TEST(test_packet_build_logical);
     RUN_TEST(test_packet_build_path);

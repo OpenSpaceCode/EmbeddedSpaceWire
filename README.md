@@ -64,6 +64,15 @@ EmbeddedSpaceWire/
 
 ## Building
 
+### Prerequisites
+
+This repository vendors the CCSDS Space Packet library as a git submodule.
+After cloning, initialise it:
+
+```bash
+git submodule update --init --recursive
+```
+
 ### Build Everything
 
 ```bash
@@ -118,6 +127,16 @@ See [examples/main.c](examples/main.c).
 - **`sw_packet_frame_t`**: 40 bytes (CCSDS PTP packet state)
 - **`sw_router_t`**: ~1.4 KB — a 256-entry routing table (3 B/entry) plus per-port
   link state; set `-DSW_NUM_PORTS=n` to shrink the per-router footprint
+
+## Thread Safety
+
+Packet, routing and link operations work entirely on caller-owned state passed
+by pointer and take no internal locks, so independent objects can be used from
+independent tasks. The one shared item is the library's statistics block:
+`sw_packet_encode` and `sw_packet_decode` update a process-global counter (read
+via `sw_get_statistics`, cleared via `sw_reset_statistics`), which is **not**
+thread-safe. In a multi-task system, serialise the encode/decode/statistics
+calls or confine them to a single task.
 
 ## Limitations and Extensions
 

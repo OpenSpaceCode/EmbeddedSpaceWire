@@ -225,6 +225,9 @@ size_t sw_packet_create(uint8_t logical_addr,
 
 /**
  * @brief Cumulative CCSDS PTP traffic counters.
+ *
+ * @note The statistics are a single process-global instance updated by
+ *       sw_packet_encode() and sw_packet_decode(); access is not thread-safe.
  */
 typedef struct
 {

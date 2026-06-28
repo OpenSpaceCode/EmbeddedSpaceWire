@@ -1,3 +1,7 @@
+/**
+ * @file test_router.c
+ * @brief Unit tests for the SpaceWire router and link-state helpers.
+ */
 #include "cunit.h"
 #include "spacewire.h"
 #include "test_runners.h"
@@ -130,7 +134,6 @@ static int test_link_layer_state_helpers(void)
         .bit_rate = 1000000,
         .disconnect_timeout = 2500,
         .rx_credit_max = 12,
-        .enable_crc = 1,
     };
 
     sw_link_layer_t link;

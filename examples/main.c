@@ -1,5 +1,6 @@
-/*
- * EmbeddedSpaceWire example — SpaceWire packets, routing and CCSDS packet transfer.
+/**
+ * @file main.c
+ * @brief EmbeddedSpaceWire example — SpaceWire packets, routing and CCSDS packet transfer.
  *
  * The character/signal and link levels are handled by the SpaceWire hardware
  * CODEC; this example exercises the packet and network layers in software.

@@ -1,3 +1,7 @@
+/**
+ * @file test_packet.c
+ * @brief Unit tests for the CCSDS Packet Transfer Protocol layer.
+ */
 #include "cunit.h"
 #include "spacewire.h"
 #include "spacewire_packet.h"

@@ -1,5 +1,6 @@
-/*
- * SpaceWire routing switch (ECSS-E-ST-50-12C clause 5.6.8) and link-state helpers.
+/**
+ * @file spacewire_router.c
+ * @brief SpaceWire routing switch (ECSS-E-ST-50-12C clause 5.6.8) and link-state helpers.
  */
 
 #include "../include/spacewire.h"
@@ -58,8 +59,12 @@ int sw_router_add_route(sw_router_t *router,
  * ROUTING DECISION
  * ============================================================================ */
 
-/* Discard a packet whose leading address references a non-existent port or an
- * unconfigured routing-table entry (clause 5.6.8.5). Returns SW_ROUTE_DISCARD. */
+/**
+ * @brief Discard a packet whose leading address references a non-existent port
+ *        or an unconfigured routing-table entry (clause 5.6.8.5).
+ * @param[in,out] router Router whose counters are updated.
+ * @return Always ::SW_ROUTE_DISCARD.
+ */
 static sw_route_result_t sw_router_invalid_address(sw_router_t *router)
 {
     router->invalid_address_errors++;
