@@ -12,8 +12,10 @@
 /* Build a representative packet: logical addressing, no path. */
 static void make_sample(sw_packet_frame_t *pf, const uint8_t *data, uint16_t data_len)
 {
-    const sw_packet_config_t config = {
-        .path = NULL, .path_len = 0, .logical_addr = 0x20, .user_app = 0x05};
+    const sw_packet_config_t config = {.path = NULL,
+                                       .path_len = 0,
+                                       .logical_addr = 0x20,
+                                       .user_app = 0x05};
     sw_packet_init(pf, &config);
     pf->packet.ph.apid = 0x0042;
     pf->packet.data = data;
@@ -35,9 +37,19 @@ static int test_packet_wire_format(void)
     ASSERT_EQ_INT(4 + 6 + 3, (int)n);
 
     const uint8_t expected[13] = {
-        0x20, 0x02, 0x00, 0x05,             /* logical, proto=0x02, reserved=0, user_app */
-        0x10, 0x42, 0x00, 0x00, 0x00, 0x02, /* CCSDS hdr: TC, APID 0x042, seq 0, len=2  */
-        0xAA, 0xBB, 0xCC                    /* data field                                */
+        0x20,
+        0x02,
+        0x00,
+        0x05, /* logical, proto=0x02, reserved=0, user_app */
+        0x10,
+        0x42,
+        0x00,
+        0x00,
+        0x00,
+        0x02, /* CCSDS hdr: TC, APID 0x042, seq 0, len=2  */
+        0xAA,
+        0xBB,
+        0xCC /* data field                                */
     };
     ASSERT_EQ_MEM(buf, expected, sizeof(expected));
     return 0;
@@ -55,9 +67,9 @@ static int test_packet_encode_decode_roundtrip(void)
 
     sw_packet_frame_t out;
     sw_ptp_status_t status = SW_PTP_STATUS_INVALID;
-    int ok = sw_packet_decode(&out, buf, n, SW_END_EOP, &status);
+    sw_result_t ok = sw_packet_decode(&out, buf, n, SW_END_EOP, &status);
 
-    ASSERT_EQ_INT(1, ok);
+    ASSERT_EQ_INT(SW_OK, ok);
     ASSERT_EQ_INT(SW_PTP_STATUS_OK, status);
     ASSERT_EQ_INT(0x20, out.logical_addr);
     ASSERT_EQ_INT(0x05, out.user_app);
@@ -87,8 +99,9 @@ static int test_packet_with_path(void)
     /* The network strips the path; the target decodes from the logical address. */
     sw_packet_frame_t out;
     sw_ptp_status_t status = SW_PTP_STATUS_INVALID;
-    int ok = sw_packet_decode(&out, buf + sizeof(path), n - sizeof(path), SW_END_EOP, &status);
-    ASSERT_EQ_INT(1, ok);
+    sw_result_t ok =
+        sw_packet_decode(&out, buf + sizeof(path), n - sizeof(path), SW_END_EOP, &status);
+    ASSERT_EQ_INT(SW_OK, ok);
     ASSERT_EQ_INT(SW_PTP_STATUS_OK, status);
     ASSERT_EQ_MEM(out.packet.data, data, sizeof(data));
     return 0;
@@ -105,9 +118,9 @@ static int test_packet_decode_eep_discarded(void)
 
     sw_packet_frame_t out;
     sw_ptp_status_t status = SW_PTP_STATUS_OK;
-    int ok = sw_packet_decode(&out, buf, n, SW_END_EEP, &status);
+    sw_result_t ok = sw_packet_decode(&out, buf, n, SW_END_EEP, &status);
 
-    ASSERT_EQ_INT(0, ok); /* clause 5.5.4.4 */
+    ASSERT_EQ_INT(SW_ERR, ok); /* clause 5.5.4.4 */
     ASSERT_EQ_INT(SW_PTP_STATUS_EEP, status);
     ASSERT_TRUE(out.packet.data == NULL); /* clause 5.2.3.2 b */
     return 0;
@@ -125,9 +138,9 @@ static int test_packet_decode_reserved_nonzero(void)
 
     sw_packet_frame_t out;
     sw_ptp_status_t status = SW_PTP_STATUS_OK;
-    int ok = sw_packet_decode(&out, buf, n, SW_END_EOP, &status);
+    sw_result_t ok = sw_packet_decode(&out, buf, n, SW_END_EOP, &status);
 
-    ASSERT_EQ_INT(0, ok); /* clause 5.5.4.3 */
+    ASSERT_EQ_INT(SW_ERR, ok); /* clause 5.5.4.3 */
     ASSERT_EQ_INT(SW_PTP_STATUS_RESERVED_NONZERO, status);
     ASSERT_TRUE(out.packet.data == NULL);
     return 0;
@@ -145,9 +158,9 @@ static int test_packet_decode_bad_protocol_id(void)
 
     sw_packet_frame_t out;
     sw_ptp_status_t status = SW_PTP_STATUS_OK;
-    int ok = sw_packet_decode(&out, buf, n, SW_END_EOP, &status);
+    sw_result_t ok = sw_packet_decode(&out, buf, n, SW_END_EOP, &status);
 
-    ASSERT_EQ_INT(0, ok); /* clause 5.5.4.1 */
+    ASSERT_EQ_INT(SW_ERR, ok); /* clause 5.5.4.1 */
     ASSERT_EQ_INT(SW_PTP_STATUS_INVALID, status);
     return 0;
 }
@@ -157,16 +170,24 @@ static int test_packet_decode_bad_protocol_id(void)
 static int test_packet_decode_malformed_ccsds(void)
 {
     const uint8_t buf[11] = {
-        0x20, 0x02, 0x00, 0x05,             /* logical, proto=0x02, reserved=0, user_app */
-        0x10, 0x42, 0x00, 0x00, 0x00, 0x05, /* CCSDS hdr: length field 5 -> data_len 6 */
-        0xAA                                /* only 1 of the 6 declared data octets */
+        0x20,
+        0x02,
+        0x00,
+        0x05, /* logical, proto=0x02, reserved=0, user_app */
+        0x10,
+        0x42,
+        0x00,
+        0x00,
+        0x00,
+        0x05, /* CCSDS hdr: length field 5 -> data_len 6 */
+        0xAA  /* only 1 of the 6 declared data octets */
     };
 
     sw_packet_frame_t out;
     sw_ptp_status_t status = SW_PTP_STATUS_OK;
-    int ok = sw_packet_decode(&out, buf, sizeof(buf), SW_END_EOP, &status);
+    sw_result_t ok = sw_packet_decode(&out, buf, sizeof(buf), SW_END_EOP, &status);
 
-    ASSERT_EQ_INT(0, ok);
+    ASSERT_EQ_INT(SW_ERR, ok);
     ASSERT_EQ_INT(SW_PTP_STATUS_INVALID, status);
     ASSERT_TRUE(out.packet.data == NULL); /* cleared on discard */
     return 0;
@@ -174,8 +195,10 @@ static int test_packet_decode_malformed_ccsds(void)
 
 static int test_packet_init_defaults(void)
 {
-    const sw_packet_config_t config = {
-        .path = NULL, .path_len = 0, .logical_addr = 0x55, .user_app = 0x99};
+    const sw_packet_config_t config = {.path = NULL,
+                                       .path_len = 0,
+                                       .logical_addr = 0x55,
+                                       .user_app = 0x99};
 
     sw_packet_frame_t pf;
     memset(&pf, 0xA5, sizeof(pf));
@@ -238,20 +261,20 @@ static int test_packet_decode_error_paths(void)
     sw_packet_frame_t out;
     sw_ptp_status_t status = SW_PTP_STATUS_OK;
 
-    ASSERT_EQ_INT(0, sw_packet_decode(NULL, buf, sizeof(buf), SW_END_EOP, &status));
+    ASSERT_EQ_INT(SW_INVALID_PARAM, sw_packet_decode(NULL, buf, sizeof(buf), SW_END_EOP, &status));
     ASSERT_EQ_INT(SW_PTP_STATUS_INVALID, status);
 
     status = SW_PTP_STATUS_OK;
-    ASSERT_EQ_INT(0, sw_packet_decode(&out, NULL, sizeof(buf), SW_END_EOP, &status));
+    ASSERT_EQ_INT(SW_INVALID_PARAM, sw_packet_decode(&out, NULL, sizeof(buf), SW_END_EOP, &status));
     ASSERT_EQ_INT(SW_PTP_STATUS_INVALID, status);
 
     /* Shorter than header + minimal CCSDS packet (11 octets). */
     status = SW_PTP_STATUS_OK;
-    ASSERT_EQ_INT(0, sw_packet_decode(&out, buf, 10, SW_END_EOP, &status));
+    ASSERT_EQ_INT(SW_ERR, sw_packet_decode(&out, buf, 10, SW_END_EOP, &status));
     ASSERT_EQ_INT(SW_PTP_STATUS_INVALID, status);
 
     /* A NULL status pointer is tolerated. */
-    ASSERT_EQ_INT(0, sw_packet_decode(&out, buf, 10, SW_END_EOP, NULL));
+    ASSERT_EQ_INT(SW_ERR, sw_packet_decode(&out, buf, 10, SW_END_EOP, NULL));
     return 0;
 }
 
@@ -267,12 +290,13 @@ static int test_packet_create_convenience(void)
 
     sw_packet_frame_t out;
     sw_ptp_status_t status = SW_PTP_STATUS_INVALID;
-    ASSERT_EQ_INT(1, sw_packet_decode(&out, buf, n, SW_END_EOP, &status));
+    ASSERT_EQ_INT(SW_OK, sw_packet_decode(&out, buf, n, SW_END_EOP, &status));
     ASSERT_EQ_INT(SW_PTP_STATUS_OK, status);
     ASSERT_EQ_INT(0x07, out.user_app);
     ASSERT_EQ_INT(0x0042, out.packet.ph.apid);
 
-    ASSERT_EQ_INT(0, sw_packet_create(0xFE, 0, 0x0042, payload, sizeof(payload), NULL, sizeof(buf)));
+    ASSERT_EQ_INT(0,
+                  sw_packet_create(0xFE, 0, 0x0042, payload, sizeof(payload), NULL, sizeof(buf)));
     return 0;
 }
 
@@ -292,8 +316,8 @@ static int test_packet_statistics(void)
 
     size_t n = sw_packet_encode(&pf, buf, sizeof(buf));
     sw_packet_frame_t out;
-    ASSERT_EQ_INT(1, sw_packet_decode(&out, buf, n, SW_END_EOP, NULL));
-    ASSERT_EQ_INT(0, sw_packet_decode(&out, buf, n, SW_END_EEP, NULL)); /* discarded */
+    ASSERT_EQ_INT(SW_OK, sw_packet_decode(&out, buf, n, SW_END_EOP, NULL));
+    ASSERT_EQ_INT(SW_ERR, sw_packet_decode(&out, buf, n, SW_END_EEP, NULL)); /* discarded */
 
     sw_get_statistics(&stats);
     ASSERT_EQ_INT(1, stats.packets_sent);
@@ -325,7 +349,7 @@ static int test_packet_virtual_channel(void)
 
     sw_packet_frame_t out;
     sw_ptp_status_t status = SW_PTP_STATUS_INVALID;
-    ASSERT_EQ_INT(1, sw_packet_decode(&out, buf, n, SW_END_EOP, &status));
+    ASSERT_EQ_INT(SW_OK, sw_packet_decode(&out, buf, n, SW_END_EOP, &status));
     ASSERT_EQ_INT(0x07, sw_packet_virtual_channel(&out));
 
     sw_packet_set_virtual_channel(NULL, 0x09); /* no-op, must not crash */

@@ -194,13 +194,13 @@ size_t sw_packet_encode(const sw_packet_frame_t *pf, uint8_t *buf, size_t buf_le
  *                      ::SW_PTP_STATUS_OK on delivery, ::SW_PTP_STATUS_EEP or
  *                      ::SW_PTP_STATUS_RESERVED_NONZERO on a recognised discard,
  *                      or ::SW_PTP_STATUS_INVALID for a bad Protocol Id / malformed input.
- * @return 1 if a valid packet is delivered, 0 if the packet is discarded.
+ * @return ::SW_OK if a valid packet is delivered, ::SW_ERR if it is discarded.
  */
-int sw_packet_decode(sw_packet_frame_t *pf,
-                     const uint8_t *buf,
-                     size_t buf_len,
-                     sw_end_marker_t end,
-                     sw_ptp_status_t *status);
+sw_result_t sw_packet_decode(sw_packet_frame_t *pf,
+                             const uint8_t *buf,
+                             size_t buf_len,
+                             sw_end_marker_t end,
+                             sw_ptp_status_t *status);
 
 /**
  * @brief Build a complete CCSDS PTP packet carrying a single APID payload.

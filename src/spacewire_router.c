@@ -37,26 +37,26 @@ void sw_router_init(sw_router_t *router, uint8_t num_ports)
  * ROUTING CONFIGURATION
  * ============================================================================ */
 
-int sw_router_add_route(sw_router_t *router,
-                        uint8_t logical_addr,
-                        uint8_t output_port,
-                        int delete_addr)
+sw_result_t sw_router_add_route(sw_router_t *router,
+                                uint8_t logical_addr,
+                                uint8_t output_port,
+                                int delete_addr)
 {
     if (!router)
-        return 0;
+        return SW_INVALID_PARAM;
 
     /* Only logical addresses 32..254 are configurable (clause 5.6.8.4). */
     if (logical_addr < SW_LOGICAL_ADDR_MIN || logical_addr == SW_LOGICAL_ADDR_RESERVED)
-        return 0;
+        return SW_WRONG_ADDRESS;
 
     if (output_port >= router->num_ports)
-        return 0;
+        return SW_WRONG_PORT;
 
     router->routes[logical_addr].output_port = output_port;
     router->routes[logical_addr].configured = 1;
     router->routes[logical_addr].delete_addr = delete_addr ? 1u : 0u;
 
-    return 1;
+    return SW_OK;
 }
 
 /* ============================================================================

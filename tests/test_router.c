@@ -59,8 +59,8 @@ static int test_router_logical_addressing(void)
     sw_router_t router;
     sw_router_init(&router, 8);
 
-    ASSERT_EQ_INT(1, sw_router_add_route(&router, 0x40, 5, 0)); /* retain address */
-    ASSERT_EQ_INT(1, sw_router_add_route(&router, 0x41, 6, 1)); /* delete address */
+    ASSERT_EQ_INT(SW_OK, sw_router_add_route(&router, 0x40, 5, 0)); /* retain address */
+    ASSERT_EQ_INT(SW_OK, sw_router_add_route(&router, 0x41, 6, 1)); /* delete address */
 
     uint8_t port = 0xFF;
     uint8_t del = 0xFF;
@@ -93,16 +93,16 @@ static int test_router_add_route_validation(void)
     sw_router_t router;
     sw_router_init(&router, 4); /* ports 0..3 */
 
-    ASSERT_EQ_INT(0, sw_router_add_route(NULL, 0x40, 1, 0));
+    ASSERT_EQ_INT(SW_INVALID_PARAM, sw_router_add_route(NULL, 0x40, 1, 0));
     /* A path-range address may not be used as a logical route. */
-    ASSERT_EQ_INT(0, sw_router_add_route(&router, 0x10, 1, 0));
+    ASSERT_EQ_INT(SW_WRONG_ADDRESS, sw_router_add_route(&router, 0x10, 1, 0));
     /* The reserved address 255 may not be configured. */
-    ASSERT_EQ_INT(0, sw_router_add_route(&router, 0xFF, 1, 0));
+    ASSERT_EQ_INT(SW_WRONG_ADDRESS, sw_router_add_route(&router, 0xFF, 1, 0));
     /* Output port must exist. */
-    ASSERT_EQ_INT(0, sw_router_add_route(&router, 0x40, 4, 0));
+    ASSERT_EQ_INT(SW_WRONG_PORT, sw_router_add_route(&router, 0x40, 4, 0));
     /* Boundaries: lowest logical address and highest valid port. */
-    ASSERT_EQ_INT(1, sw_router_add_route(&router, 0x20, 3, 0));
-    ASSERT_EQ_INT(1, sw_router_add_route(&router, 0xFE, 0, 0));
+    ASSERT_EQ_INT(SW_OK, sw_router_add_route(&router, 0x20, 3, 0));
+    ASSERT_EQ_INT(SW_OK, sw_router_add_route(&router, 0xFE, 0, 0));
     return 0;
 }
 

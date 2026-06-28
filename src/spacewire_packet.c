@@ -120,9 +120,11 @@ static void sw_packet_clear_payload(sw_packet_frame_t *pf)
  * @param[out] pf     Packet frame; must be non-NULL.
  * @param[out] status Receive-status output; may be NULL.
  * @param[in]  code   Status code to report.
- * @return Always 0.
+ * @return Always ::SW_ERR.
  */
-static int sw_packet_discard(sw_packet_frame_t *pf, sw_ptp_status_t *status, sw_ptp_status_t code)
+static sw_result_t sw_packet_discard(sw_packet_frame_t *pf,
+                                     sw_ptp_status_t *status,
+                                     sw_ptp_status_t code)
 {
     sw_packet_clear_payload(pf);
     g_sw_stats.packets_discarded++;
@@ -130,21 +132,21 @@ static int sw_packet_discard(sw_packet_frame_t *pf, sw_ptp_status_t *status, sw_
     if (status)
         *status = code;
 
-    return 0;
+    return SW_ERR;
 }
 
-int sw_packet_decode(sw_packet_frame_t *pf,
-                     const uint8_t *buf,
-                     size_t buf_len,
-                     sw_end_marker_t end,
-                     sw_ptp_status_t *status)
+sw_result_t sw_packet_decode(sw_packet_frame_t *pf,
+                             const uint8_t *buf,
+                             size_t buf_len,
+                             sw_end_marker_t end,
+                             sw_ptp_status_t *status)
 {
     if (!pf || !buf)
     {
         if (status)
             *status = SW_PTP_STATUS_INVALID;
 
-        return 0;
+        return SW_INVALID_PARAM;
     }
 
     /* clause 5.5.4.4: a packet terminated by EEP shall be discarded. */
@@ -183,7 +185,7 @@ int sw_packet_decode(sw_packet_frame_t *pf,
     if (status)
         *status = SW_PTP_STATUS_OK;
 
-    return 1;
+    return SW_OK;
 }
 
 /* ============================================================================

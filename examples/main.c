@@ -95,7 +95,7 @@ int main(void)
 
     sw_packet_frame_t decoded_pf;
     sw_ptp_status_t status;
-    if (sw_packet_decode(&decoded_pf, pkt_buf, pkt_size, SW_END_EOP, &status))
+    if (sw_packet_decode(&decoded_pf, pkt_buf, pkt_size, SW_END_EOP, &status) == SW_OK)
     {
         printf("    Decoded APID: 0x%04X\n", decoded_pf.packet.ph.apid);
         printf("    Decoded user application: 0x%02X\n", decoded_pf.user_app);

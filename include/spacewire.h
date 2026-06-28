@@ -24,6 +24,24 @@
 #include <stdint.h>
 
 /* ============================================================================
+ * RETURN CODES
+ * ============================================================================ */
+
+/**
+ * @brief Generic success/failure result for functions that report status.
+ *
+ * Values are chosen so that ::SW_OK is truthy and ::SW_ERR is falsy.
+ */
+typedef enum
+{
+    SW_OK = 0,                /**< Operation succeeded, or a packet was delivered. */
+    SW_ERR = -0x01,           /**< Operation failed, or no packet was delivered. */
+    SW_INVALID_PARAM = -0x02, /**< Invalid parameter */
+    SW_WRONG_ADDRESS = -0x03, /**< Invalid address */
+    SW_WRONG_PORT = -0x04,    /**< Invalid port */
+} sw_result_t;
+
+/* ============================================================================
  * SPACEWIRE PACKET (ECSS-E-ST-50-12C clause 5.6.2)
  * ============================================================================ */
 
@@ -160,12 +178,12 @@ void sw_router_init(sw_router_t *router, uint8_t num_ports);
  * @param[in]     output_port  Existing output port to forward through.
  * @param[in]     delete_addr  Non-zero to delete the logical address before
  *                             forwarding (logical-address deletion, clause 5.6.8.6).
- * @return 1 on success, 0 on invalid arguments.
+ * @return ::SW_OK on success, error code otherwise.
  */
-int sw_router_add_route(sw_router_t *router,
-                        uint8_t logical_addr,
-                        uint8_t output_port,
-                        int delete_addr);
+sw_result_t sw_router_add_route(sw_router_t *router,
+                                uint8_t logical_addr,
+                                uint8_t output_port,
+                                int delete_addr);
 
 /**
  * @brief Decide the output port for a packet from its leading address character.
