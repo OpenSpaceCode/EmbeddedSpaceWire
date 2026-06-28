@@ -3,7 +3,7 @@ CC ?= cc
 CFLAGS ?= -O2 -Iinclude -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
 		  -Wcast-align -Wcast-qual -Wpointer-arith -Wformat=2 \
 		  -Wmissing-prototypes -Wstrict-prototypes -Wredundant-decls -Wundef \
-		  -std=c11
+		  -std=c99
 AR ?= ar
 CFLAGS += -I./external/EmbeddedSpacePacket/include -fPIC
 
@@ -13,8 +13,7 @@ LIB_DIR := $(BUILD_DIR)/lib
 BIN_DIR := $(BUILD_DIR)/bin
 
 # Source files
-CORE_SRCS := src/spacewire_codec.c \
-             src/spacewire_frame.c \
+CORE_SRCS := src/spacewire_spw_packet.c \
              src/spacewire_router.c \
              src/spacewire_packet.c
 
@@ -22,8 +21,7 @@ ESP_SRCS := external/EmbeddedSpacePacket/src/space_packet.c
 
 EXAMPLE_SRCS := examples/main.c
 TEST_SRCS := tests/unit_tests.c \
-             tests/test_codec.c \
-             tests/test_frame.c \
+             tests/test_spw_packet.c \
              tests/test_router.c \
              tests/test_packet.c
 
@@ -42,7 +40,7 @@ TEST_BIN := $(BIN_DIR)/spacewire_tests
 # Build targets
 .PHONY: all clean test example lib coverage-html help distclean
 
-all: lib example
+all: lib test
 
 lib: $(LIB_STATIC) $(LIB_SHARED)
 
@@ -76,7 +74,7 @@ clean:
 	rm -f libspacewire.a libspacewire.so spacewire_example spacewire_tests
 
 coverage-html:
-	bash scripts/coverage_html.sh
+	bash tools/coverage_html.sh
 
 distclean: clean
 	find . -name "*.o" -delete

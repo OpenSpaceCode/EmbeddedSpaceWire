@@ -1,6 +1,9 @@
-/* Tiny C unit test helpers. Suitable for embedding in small projects.
- * Usage: include this header in a single C test file and implement test
- * functions returning 0 on success, non-zero on failure. Use RUN_TEST(fn).
+/**
+ * @file cunit.h
+ * @brief Tiny C unit-test helpers (assertions and a test-runner macro).
+ *
+ * Include in a single C test file and implement test functions returning 0 on
+ * success, non-zero on failure. Use RUN_TEST(fn).
  */
 #ifndef CUNIT_H
 #define CUNIT_H

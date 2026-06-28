@@ -1,6 +1,11 @@
-/*
- * Space Wire + CCSDS Space Packet Integration
- * High-level API combining both protocols
+/**
+ * @file spacewire_packet.c
+ * @brief CCSDS Packet Transfer Protocol over SpaceWire (ECSS-E-ST-50-53C).
+ *
+ * Encapsulates a CCSDS Space Packet into a SpaceWire packet on the send path
+ * and extracts it on the receive path. No checksum is added: ECSS-E-ST-50-53C
+ * relies on SpaceWire character parity and the EOP/EEP markers for error
+ * detection.
  */
 
 #include "../include/spacewire_packet.h"
@@ -11,7 +16,7 @@
 static sw_statistics_t g_sw_stats = {0};
 
 /* ============================================================================
- * PACKET INITIALIZATION
+ * PACKET INITIALISATION
  * ============================================================================ */
 
 void sw_packet_init(sw_packet_frame_t *pf, const sw_packet_config_t *config)
@@ -19,22 +24,23 @@ void sw_packet_init(sw_packet_frame_t *pf, const sw_packet_config_t *config)
     if (!pf || !config)
         return;
 
-    memset(pf, 0, sizeof(sw_packet_frame_t));
+    memset(pf, 0, sizeof(*pf));
 
-    /* Initialize frame */
-    pf->frame.target_addr = config->target_addr;
-    pf->frame.protocol_id = config->protocol_id;
+    pf->path = config->path;
+    pf->path_len = config->path_len;
+    pf->logical_addr = config->logical_addr;
+    pf->user_app = config->user_app;
 
-    /* Initialize packet */
     sp_packet_init(&pf->packet);
+
     pf->packet.ph.version = 0;
-    pf->packet.ph.type = 1; /* Telemetry */
+    pf->packet.ph.type = SP_PACKET_TYPE_TC; /* default Packet Type (CCSDS: TM=0, TC=1) */
     pf->packet.ph.sec_hdr_flag = 0;
     pf->packet.ph.apid = 0;
 }
 
 /* ============================================================================
- * PACKET ENCODING (SERIALIZATION)
+ * PACKET ENCODING (clause 5.4)
  * ============================================================================ */
 
 size_t sw_packet_encode(const sw_packet_frame_t *pf, uint8_t *buf, size_t buf_len)
@@ -42,73 +48,152 @@ size_t sw_packet_encode(const sw_packet_frame_t *pf, uint8_t *buf, size_t buf_le
     if (!pf || !buf)
         return 0;
 
-    if (pf->packet.payload_len > 0 && pf->packet.payload == NULL)
+    if (pf->packet.data_len > 0 && pf->packet.data == NULL)
         return 0;
 
-    if (pf->packet.ph.sec_hdr_flag)
+    /* Path octets must be valid SpaceWire path addresses (0..31). */
+    if (pf->path_len > 0 && pf->path == NULL)
+        return 0;
+
+    for (uint8_t i = 0; i < pf->path_len; i++)
     {
-        if (pf->packet.sec_hdr == NULL || pf->packet.sec_hdr_len < 2)
+        if (pf->path[i] > SW_PTP_PATH_OCTET_MAX)
             return 0;
     }
 
-    /* First, serialize the CCSDS packet */
-    size_t pkt_size = sp_packet_serialize_size(&pf->packet);
-    if (pkt_size == 0 || pkt_size > SW_FRAME_MAX_PAYLOAD)
+    /* CCSDS packet length must be within bounds (clause 5.1.2). */
+    const size_t ccsds_len = sp_packet_serialize_size(&pf->packet);
+    if (ccsds_len < SW_PTP_CCSDS_MIN_LEN || ccsds_len > SW_PTP_CCSDS_MAX_LEN)
         return 0;
 
-    /* Create temporary buffer for serialized packet */
-    uint8_t pkt_buf[SW_FRAME_MAX_PAYLOAD];
-    size_t serialized = sp_packet_serialize(&pf->packet, pkt_buf, sizeof(pkt_buf));
-    if (serialized == 0)
+    const size_t total = (size_t)pf->path_len + SW_PTP_HEADER_LEN + ccsds_len;
+    if (buf_len < total)
         return 0;
 
-    /* Now create Space Wire frame with packet as payload */
-    sw_frame_t frame = pf->frame;
-    frame.payload = pkt_buf;
-    frame.payload_len = (uint16_t)serialized;
+    size_t offset = 0;
 
-    size_t frame_size = sw_frame_encode(&frame, buf, buf_len);
-    if (frame_size > 0)
+    /* Target SpaceWire (path) Address (clause 5.3.1). */
+    if (pf->path_len > 0)
     {
-        g_sw_stats.packets_sent++;
-        g_sw_stats.bytes_sent += (uint32_t)frame_size;
+        memcpy(&buf[offset], pf->path, pf->path_len);
+        offset += pf->path_len;
     }
 
-    return frame_size;
+    /* Encapsulation header (clause 5.4.1). */
+    buf[offset++] = pf->logical_addr;            /* Target Logical Address (5.3.2) */
+    buf[offset++] = (uint8_t)SW_PTP_PROTOCOL_ID; /* Protocol Identifier = 0x02     */
+    buf[offset++] = (uint8_t)SW_PTP_RESERVED;    /* Reserved = 0x00                */
+    buf[offset++] = pf->user_app;                /* User Application (5.3.5)        */
+
+    /* CCSDS Space Packet (clause 5.3.6). The length bounds (sp_packet_serialize_size)
+     * and the buffer size were validated above, so serialisation cannot fail here. */
+    const size_t written = sp_packet_serialize(&pf->packet, &buf[offset], buf_len - offset);
+    offset += written;
+
+    g_sw_stats.packets_sent++;
+    g_sw_stats.bytes_sent += (uint32_t)offset;
+
+    return offset;
 }
 
 /* ============================================================================
- * PACKET DECODING (PARSING)
+ * PACKET DECODING (clause 5.5.4)
  * ============================================================================ */
 
-int sw_packet_decode(sw_packet_frame_t *pf, uint8_t *buf, size_t buf_len)
+/**
+ * @brief Clear the delivered packet/user-application fields (clause 5.2.3.2 b).
+ * @param[out] pf Packet frame to clear.
+ */
+static void sw_packet_clear_payload(sw_packet_frame_t *pf)
+{
+    pf->path = NULL;
+    pf->path_len = 0;
+    pf->logical_addr = 0;
+    pf->user_app = 0;
+
+    sp_packet_init(&pf->packet);
+}
+
+/**
+ * @brief Discard a received packet: clear the delivered fields, count it, and
+ *        report the status code (clause 5.5.4).
+ * @param[out] pf     Packet frame; must be non-NULL.
+ * @param[out] status Receive-status output; may be NULL.
+ * @param[in]  code   Status code to report.
+ * @return Always ::SW_ERR.
+ */
+static sw_result_t sw_packet_discard(sw_packet_frame_t *pf,
+                                     sw_ptp_status_t *status,
+                                     sw_ptp_status_t code)
+{
+    sw_packet_clear_payload(pf);
+    g_sw_stats.packets_discarded++;
+
+    if (status)
+        *status = code;
+
+    return SW_ERR;
+}
+
+sw_result_t sw_packet_decode(sw_packet_frame_t *pf,
+                             const uint8_t *buf,
+                             size_t buf_len,
+                             sw_end_marker_t end,
+                             sw_ptp_status_t *status)
 {
     if (!pf || !buf)
-        return 0;
+    {
+        if (status)
+            *status = SW_PTP_STATUS_INVALID;
 
-    /* First, decode the Space Wire frame */
-    if (!sw_frame_decode(&pf->frame, buf, buf_len))
-        return 0;
+        return SW_INVALID_PARAM;
+    }
 
-    /* Then, parse the CCSDS packet from frame payload */
-    uint8_t *payload_buf = pf->frame.payload;
-    size_t payload_len = pf->frame.payload_len;
+    /* clause 5.5.4.4: a packet terminated by EEP shall be discarded. */
+    if (end == SW_END_EEP)
+        return sw_packet_discard(pf, status, SW_PTP_STATUS_EEP);
 
-    if (!sp_packet_parse(&pf->packet, payload_buf, payload_len))
-        return 0;
+    /* Need the encapsulation header plus a minimal CCSDS packet. */
+    if (buf_len < (size_t)SW_PTP_HEADER_LEN + SW_PTP_CCSDS_MIN_LEN)
+        return sw_packet_discard(pf, status, SW_PTP_STATUS_INVALID);
+
+    const uint8_t logical = buf[0];
+    const uint8_t proto = buf[1];
+    const uint8_t reserved = buf[2];
+    const uint8_t user_app = buf[3];
+
+    /* clause 5.5.4.1: only Protocol Identifier 0x02 is a CCSDS PTP packet. */
+    if (proto != SW_PTP_PROTOCOL_ID)
+        return sw_packet_discard(pf, status, SW_PTP_STATUS_INVALID);
+
+    /* clause 5.5.4.3: Reserved field non-zero -> discard, packet/user app null. */
+    if (reserved != SW_PTP_RESERVED)
+        return sw_packet_discard(pf, status, SW_PTP_STATUS_RESERVED_NONZERO);
+
+    /* clause 5.5.4.2: extract the CCSDS packet and User Application value. */
+    if (!sp_packet_parse(&pf->packet, &buf[SW_PTP_HEADER_LEN], buf_len - SW_PTP_HEADER_LEN))
+        return sw_packet_discard(pf, status, SW_PTP_STATUS_INVALID);
+
+    pf->path = NULL;
+    pf->path_len = 0;
+    pf->logical_addr = logical;
+    pf->user_app = user_app;
 
     g_sw_stats.packets_received++;
     g_sw_stats.bytes_received += (uint32_t)buf_len;
 
-    return 1; /* Success */
+    if (status)
+        *status = SW_PTP_STATUS_OK;
+
+    return SW_OK;
 }
 
 /* ============================================================================
  * CONVENIENCE FUNCTION
  * ============================================================================ */
 
-size_t sw_packet_create(uint8_t device_addr,
-                        uint8_t target_addr,
+size_t sw_packet_create(uint8_t logical_addr,
+                        uint8_t user_app,
                         uint16_t apid,
                         const uint8_t *payload,
                         uint16_t payload_len,
@@ -118,21 +203,18 @@ size_t sw_packet_create(uint8_t device_addr,
     if (!buf)
         return 0;
 
-    /* Create packet frame */
-    sw_packet_config_t config = {.device_addr = device_addr,
-                                 .target_addr = target_addr,
-                                 .protocol_id = 1, /* CCSDS */
-                                 .enable_crc = 1};
+    const sw_packet_config_t config = {.path = NULL,
+                                       .path_len = 0,
+                                       .logical_addr = logical_addr,
+                                       .user_app = user_app};
 
     sw_packet_frame_t pf;
     sw_packet_init(&pf, &config);
 
-    /* Set CCSDS packet fields */
-    pf.packet.ph.apid = (unsigned)(apid & 0x7FFU);
-    pf.packet.payload = payload;
-    pf.packet.payload_len = payload_len;
+    pf.packet.ph.apid = (unsigned)(apid & 0x7FFu);
+    pf.packet.data = payload;
+    pf.packet.data_len = payload_len;
 
-    /* Serialize and return */
     return sw_packet_encode(&pf, buf, buf_len);
 }
 
@@ -144,6 +226,7 @@ void sw_get_statistics(sw_statistics_t *stats)
 {
     if (!stats)
         return;
+
     *stats = g_sw_stats;
 }
 

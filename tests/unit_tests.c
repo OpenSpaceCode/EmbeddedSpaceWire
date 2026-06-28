@@ -1,3 +1,7 @@
+/**
+ * @file unit_tests.c
+ * @brief Unit-test entry point: runs each suite and reports totals.
+ */
 #include "test_runners.h"
 
 #include <stdio.h>
@@ -6,17 +10,12 @@
 
 int main(void)
 {
-    pus_test_result_t r;
+    test_result_t r;
     int total_passed = 0;
     int total_tests = 0;
 
-    r = test_spacewire_codec_run_all();
-    REPORT("codec", r);
-    total_passed += r.passed;
-    total_tests += r.total;
-
-    r = test_spacewire_frame_run_all();
-    REPORT("frame", r);
+    r = test_spacewire_spw_packet_run_all();
+    REPORT("spw-packet", r);
     total_passed += r.passed;
     total_tests += r.total;
 

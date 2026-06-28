@@ -1,57 +1,77 @@
 # EmbeddedSpaceWire
 
-Minimal, embedded-optimized implementation of **CCSDS Space Wire Protocol** combined with **CCSDS Space Packet Transfer** protocol, following international standards.
+Minimal, embedded-optimized implementation of the **SpaceWire** packet and network layers (ECSS-E-ST-50-12C) carrying the **CCSDS Packet Transfer Protocol** (ECSS-E-ST-50-53C).
 
 ## Standards Compliance
 
-- **CCSDS 131.0-B-2**: Space Wire - Communication Protocol
-- **ECSS-E-ST-50-53C**: Space Wire Protocol Specification
-- **CCSDS 133.0-B-2**: CCSDS Space Packet
+- **ECSS-E-ST-50-12C** Rev.1: SpaceWire — links, nodes, routers and networks
+- **ECSS-E-ST-50-53C**: SpaceWire — CCSDS packet transfer protocol
+- **ECSS-E-ST-50-51C**: SpaceWire — protocol identification (Protocol ID `0x02`)
+- **CCSDS 133.0-B-2**: Space Packet Protocol
 
 ## Features
 
 ### Core Protocol Implementation
 
-- **Character Codec**: 9-bit character encoding with parity support
-- **Frame Layer**: Space Wire frame structure with CRC-16-CCITT
-- **Router**: Packet routing with virtual channel support
-- **Link Layer**: Link state management and flow control
-- **CCSDS Integration**: Combined Space Wire + Space Packet transmission
+- **Network layer**: SpaceWire packets and routing — path (0–31) and logical
+  (32–254) addressing with header deletion (ECSS-E-ST-50-12C §5.6)
+- **CCSDS Packet Transfer Protocol**: encapsulation/extraction of CCSDS Space
+  Packets with EOP/EEP receive status (ECSS-E-ST-50-53C)
+- **CCSDS Integration**: built on the EmbeddedSpacePacket library
+
+### Scope (hardware boundary)
+
+This is a **packet- and network-layer** library. The character/signal and
+data-link levels — character encoding and parity, data-strobe signalling, link
+initialisation and flow control, and EOP/EEP generation and detection — are
+provided by the **SpaceWire hardware CODEC**. EOP/EEP are exchanged with this
+library as out-of-band metadata, not as bytes within packet buffers.
 
 ### Design Principles
 
-- **Minimal footprint**: ~5KB library size (stripped)
-- **Zero allocation**: Stack-based, no dynamic memory
-- **Embedded-optimized**: No external dependencies except EmbeddedSpacePacket
-- **Portable**: Pure C11, big-endian network byte order
-- **Fast**: Lookup-table CRC computation
+- **Minimal footprint**: small static library, no dynamic allocation
+- **Zero allocation**: stack- and caller-owned buffers only
+- **Embedded-optimized**: no external dependencies except EmbeddedSpacePacket
+- **Portable**: pure C99, big-endian network byte order
+- **Standards-driven**: no non-standard framing or checksums on the wire
 
 ## Project Structure
 
 ```
 EmbeddedSpaceWire/
 ├── include/
-│   ├── spacewire.h          # Core Space Wire protocol
-│   └── spacewire_packet.h   # CCSDS integration
+│   ├── spacewire.h          # SpaceWire packet + network (routing) layer
+│   └── spacewire_packet.h   # CCSDS packet transfer protocol (ECSS-E-ST-50-53C)
 ├── src/
-│   ├── spacewire_codec.c    # Character codec + CRC
-│   ├── spacewire_frame.c    # Frame layer
-│   ├── spacewire_router.c   # Router + link layer
-│   └── spacewire_packet.c   # CCSDS integration
+│   ├── spacewire_frame.c    # SpaceWire packet builder
+│   ├── spacewire_router.c   # Routing switch + link state
+│   └── spacewire_packet.c   # CCSDS packet transfer protocol
 ├── external/
-│   └── EmbeddedSpacePacket/ # CCSDS Space Packet library
+│   └── EmbeddedSpacePacket/ # CCSDS Space Packet library (submodule)
 ├── examples/
-│   └── main.c               # Example usage
+│   └── main.c               # End-to-end usage
 ├── tests/
 │   ├── cunit.h              # Tiny C test helpers
-│   └── unit_tests.c         # Unit tests
-├── scripts/
+│   ├── test_frame.c         # Packet-builder tests
+│   ├── test_router.c        # Routing + link tests
+│   ├── test_packet.c        # CCSDS PTP tests (+ golden wire vector)
+│   └── unit_tests.c         # Test runner
+├── tools/
 │   └── coverage_html.sh     # HTML coverage generator
 ├── Makefile
 └── README.md
 ```
 
 ## Building
+
+### Prerequisites
+
+This repository vendors the CCSDS Space Packet library as a git submodule.
+After cloning, initialise it:
+
+```bash
+git submodule update --init --recursive
+```
 
 ### Build Everything
 
@@ -98,136 +118,46 @@ make distclean  # Deep clean including object files
 
 ## Quick Start
 
-### Create and Send a Space Wire Packet
+See [examples/main.c](examples/main.c).
 
-```c
-#include "spacewire.h"
-#include "spacewire_packet.h"
 
-// Create a CCSDS packet wrapped in Space Wire frame
-uint8_t buffer[256];
-const char *data = "Hello Space Wire";
+## Memory Usage
 
-size_t frame_size = sw_packet_create(
-    0x01,                      // Local device address
-    0x02,                      // Target device address
-    0x0042,                    // APID (Application ID)
-    (uint8_t *)data,           // Payload
-    strlen(data),              // Payload length
-    buffer,                    // Output buffer
-    sizeof(buffer)             // Buffer size
-);
+- **Library code**: ~3 KB (`.text`); no dynamic allocation, all buffers caller-owned
+- **`sw_packet_frame_t`**: 40 bytes (CCSDS PTP packet state)
+- **`sw_router_t`**: ~1.4 KB — a 256-entry routing table (3 B/entry) plus per-port
+  link state; set `-DSW_NUM_PORTS=n` to shrink the per-router footprint
 
-if (frame_size > 0) {
-    printf("Packet created: %zu bytes\n", frame_size);
-}
-```
+## Thread Safety
 
-### Parse Incoming Packet
-
-```c
-sw_packet_frame_t pf;
-sw_packet_config_t config = {
-    .device_addr = 0x01,
-    .target_addr = 0x02,
-    .protocol_id = 1,
-    .enable_crc = 1
-};
-
-sw_packet_init(&pf, &config);
-
-if (sw_packet_decode(&pf, buffer, frame_size)) {
-    printf("APID: 0x%04X, Payload: %d bytes\n",
-           pf.packet.ph.apid,
-           pf.packet.payload_len);
-}
-```
-
-### Frame Routing
-
-```c
-sw_router_t router;
-sw_router_init(&router, 0x01, 2);  // Device 0x01, 2 ports
-
-// Add routing rule: packets to 0x03 go out port 1
-sw_router_add_route(&router, 0x03, 1);
-
-// Route a frame
-uint8_t out_port;
-if (sw_router_route_frame(&router, &frame, &out_port)) {
-    printf("Route to port: %u\n", out_port);
-}
-```
-
-## API Reference
-
-### Character Codec
-
-```c
-// Decode 9-bit character
-sw_char_result_t sw_decode_char(uint8_t byte, uint8_t parity_bit, uint8_t *data);
-
-// Encode character with parity
-uint8_t sw_encode_char(uint8_t data, uint8_t *byte);
-
-// Compute CRC
-uint16_t sw_crc16(const uint8_t *data, size_t len);
-```
-
-### Frame Layer
-
-```c
-void sw_frame_init(sw_frame_t *frame);
-size_t sw_frame_size(const sw_frame_t *frame);
-size_t sw_frame_encode(const sw_frame_t *frame, uint8_t *buf, size_t buf_len);
-int sw_frame_decode(sw_frame_t *frame, uint8_t *buf, size_t buf_len);
-```
-
-### Router
-
-```c
-void sw_router_init(sw_router_t *router, uint8_t device_addr, uint8_t num_ports);
-void sw_router_add_route(sw_router_t *router, uint8_t dest_addr, uint8_t output_port);
-int sw_router_open_channel(sw_router_t *router, uint8_t channel_id);
-int sw_router_route_frame(sw_router_t *router, const sw_frame_t *frame, uint8_t *output_port);
-```
-
-### Packet Integration
-
-```c
-void sw_packet_init(sw_packet_frame_t *pf, const sw_packet_config_t *config);
-size_t sw_packet_encode(const sw_packet_frame_t *pf, uint8_t *buf, size_t buf_len);
-int sw_packet_decode(sw_packet_frame_t *pf, uint8_t *buf, size_t buf_len);
-size_t sw_packet_create(uint8_t device_addr, uint8_t target_addr, uint16_t apid,
-                        const uint8_t *payload, uint16_t payload_len,
-                        uint8_t *buf, size_t buf_len);
-```
-
-## Memory Usage (Estimated)
-
-- **Library (stripped)**: ~4-5 KB
-- **Per-frame buffer**: Frame size + 4 bytes overhead
-- **Router state**: ~200 bytes base + 16 bytes per port
-- **Packet frame**: ~100 bytes (including CCSDS header)
+Packet, routing and link operations work entirely on caller-owned state passed
+by pointer and take no internal locks, so independent objects can be used from
+independent tasks. The one shared item is the library's statistics block:
+`sw_packet_encode` and `sw_packet_decode` update a process-global counter (read
+via `sw_get_statistics`, cleared via `sw_reset_statistics`), which is **not**
+thread-safe. In a multi-task system, serialise the encode/decode/statistics
+calls or confine them to a single task.
 
 ## Limitations and Extensions
 
-Current implementation focuses on core protocol features:
+The library implements the packet and network layers; the following are out of
+scope or not yet implemented:
 
-- Single-destination routing (no path routing)
-- Flow control (basic credit-based)
-- CRC validation
-- No automatic retransmission handling
-- No bandwidth management
-- No advanced QoS features
+- Character/signal and data-link levels — provided by the SpaceWire hardware CODEC
+- Time-codes, broadcast codes and distributed interrupts (ECSS-E-ST-50-12C §5.6)
+- Group adaptive routing (one output port per logical address)
+- Guaranteed delivery — per ECSS-E-ST-50-53C the service is unconfirmed and
+  incomplete (no acknowledgement, retransmission or QoS)
 
-These can be extended as needed for specific mission requirements.
+These can be added as needed for specific mission requirements.
 
 ## References
 
-- CCSDS 131.0-B-2: Space Wire - Communication Protocol
-- ECSS-E-ST-50-53C: European Cooperation for Space Standardization
-- CCSDS 133.0-B-2: CCSDS Space Packet Protocol
+- ECSS-E-ST-50-12C Rev.1 — SpaceWire: links, nodes, routers and networks
+- ECSS-E-ST-50-53C — SpaceWire: CCSDS packet transfer protocol
+- ECSS-E-ST-50-51C — SpaceWire: protocol identification
+- CCSDS 133.0-B-2 — Space Packet Protocol
+- https://www.spacewire.esa.int — SpaceWire website
 
 ## License
 

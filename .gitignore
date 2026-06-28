@@ -55,12 +55,7 @@ dkms.conf
 *.dwo
 
 # Build outputs
-examples/spacepacket_example
-tests/ctest
 build/
-external/
-spacewire_example
-spacewire_tests
 
 # Editor configs
 .vscode/

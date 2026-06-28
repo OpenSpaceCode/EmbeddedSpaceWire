@@ -1,5 +1,6 @@
-/*
- * Space Wire Router - Packet routing and virtual channels
+/**
+ * @file spacewire_router.c
+ * @brief SpaceWire routing switch (ECSS-E-ST-50-12C clause 5.6.8) and link-state helpers.
  */
 
 #include "../include/spacewire.h"
@@ -7,31 +8,28 @@
 #include <string.h>
 
 /* ============================================================================
- * ROUTER INITIALIZATION
+ * ROUTER INITIALISATION
  * ============================================================================ */
 
-void sw_router_init(sw_router_t *router, uint8_t device_addr, uint8_t num_ports)
+void sw_router_init(sw_router_t *router, uint8_t num_ports)
 {
     if (!router)
         return;
 
-    memset(router, 0, sizeof(sw_router_t));
-    router->device_addr = device_addr;
-    router->num_ports = (num_ports <= SW_MAX_PORTS) ? num_ports : SW_MAX_PORTS;
+    memset(router, 0, sizeof(*router));
 
-    /* Initialize ports */
+    if (num_ports == 0)
+        num_ports = 1;
+
+    if (num_ports > SW_NUM_PORTS)
+        num_ports = SW_NUM_PORTS;
+
+    router->num_ports = num_ports;
+
     for (uint8_t i = 0; i < router->num_ports; i++)
     {
         router->links[i].port_id = i;
         router->links[i].state = SW_LINK_UNINITIALIZED;
-    }
-
-    /* Initialize virtual channels */
-    for (uint8_t i = 0; i < SW_MAX_VIRTUAL_CHANNELS; i++)
-    {
-        router->channels[i].channel_id = i;
-        router->channels[i].active = 0;
-        router->channels[i].fct_credits = 64; /* Default credits */
     }
 }
 
@@ -39,58 +37,93 @@ void sw_router_init(sw_router_t *router, uint8_t device_addr, uint8_t num_ports)
  * ROUTING CONFIGURATION
  * ============================================================================ */
 
-void sw_router_add_route(sw_router_t *router, uint8_t dest_addr, uint8_t output_port)
+sw_result_t sw_router_add_route(sw_router_t *router,
+                                uint8_t logical_addr,
+                                uint8_t output_port,
+                                int delete_addr)
 {
-    if (!router || dest_addr >= SW_MAX_PORTS || output_port >= router->num_ports)
-        return;
+    if (!router)
+        return SW_INVALID_PARAM;
 
-    router->routes[dest_addr].dest_addr = dest_addr;
-    router->routes[dest_addr].output_port = output_port;
+    /* Only logical addresses 32..254 are configurable (clause 5.6.8.4). */
+    if (logical_addr < SW_LOGICAL_ADDR_MIN || logical_addr == SW_LOGICAL_ADDR_RESERVED)
+        return SW_WRONG_ADDRESS;
+
+    if (output_port >= router->num_ports)
+        return SW_WRONG_PORT;
+
+    router->routes[logical_addr].output_port = output_port;
+    router->routes[logical_addr].configured = 1;
+    router->routes[logical_addr].delete_addr = delete_addr ? 1u : 0u;
+
+    return SW_OK;
 }
 
 /* ============================================================================
- * VIRTUAL CHANNEL MANAGEMENT
+ * ROUTING DECISION
  * ============================================================================ */
 
-int sw_router_open_channel(sw_router_t *router, uint8_t channel_id)
+/**
+ * @brief Discard a packet whose leading address references a non-existent port
+ *        or an unconfigured routing-table entry (clause 5.6.8.5).
+ * @param[in,out] router Router whose counters are updated.
+ * @return Always ::SW_ROUTE_DISCARD.
+ */
+static sw_route_result_t sw_router_invalid_address(sw_router_t *router)
 {
-    if (!router || channel_id >= SW_MAX_VIRTUAL_CHANNELS)
-        return 0;
+    router->invalid_address_errors++;
+    router->packets_discarded++;
 
-    router->channels[channel_id].active = 1;
-    return 1;
+    return SW_ROUTE_DISCARD;
 }
 
-/* ============================================================================
- * FRAME ROUTING
- * ============================================================================ */
-
-int sw_router_route_frame(sw_router_t *router, const sw_frame_t *frame, uint8_t *output_port)
+sw_route_result_t sw_router_route(sw_router_t *router,
+                                  const uint8_t *packet,
+                                  size_t len,
+                                  uint8_t *output_port,
+                                  uint8_t *delete_leading)
 {
-    if (!router || !frame || !output_port)
-        return 0;
+    if (!router || !packet || !output_port || !delete_leading)
+        return SW_ROUTE_DISCARD;
 
-    /* If destination is this device, don't route (local delivery) */
-    if (frame->target_addr == router->device_addr)
-        return 0;
+    *delete_leading = 0;
 
-    /* Look up destination in routing table */
-    if (frame->target_addr >= SW_MAX_PORTS)
-        return 0; /* Invalid destination */
+    /* An empty packet is discarded by the first routing switch (clause 5.6.2.1). */
+    if (len == 0)
+    {
+        router->packets_discarded++;
+        return SW_ROUTE_DISCARD;
+    }
 
-    uint8_t port = router->routes[frame->target_addr].output_port;
+    const uint8_t lead = packet[0];
 
-    /* Check port exists and is connected */
-    if (port >= router->num_ports)
-        return 0;
+    if (lead <= SW_PATH_ADDR_MAX)
+    {
+        /* Path addressing (clause 5.6.8.3): the character names the output port. */
+        if (lead >= router->num_ports)
+            return sw_router_invalid_address(router);
 
-    if (router->links[port].state != SW_LINK_CONNECTED)
-        return 0;
+        *output_port = lead;
+        *delete_leading = 1; /* a path address is always deleted (Table 5-11) */
+        router->packets_routed++;
 
-    *output_port = port;
-    router->links[port].tx_packets++;
+        return SW_ROUTE_OK;
+    }
 
-    return 1; /* Success */
+    /* Logical addressing (clause 5.6.8.4): look up the routing table. A logical
+     * address that is unconfigured (including the reserved address 255) or that
+     * maps to a non-existent port is discarded with an invalid-address error
+     * (clause 5.6.8.5). */
+    const sw_route_entry_t *entry = &router->routes[lead];
+
+    if (!entry->configured || entry->output_port >= router->num_ports)
+        return sw_router_invalid_address(router);
+
+    *output_port = entry->output_port;
+    *delete_leading = entry->delete_addr ? 1u : 0u; /* clause 5.6.8.6 */
+    router->packets_routed++;
+
+    return SW_ROUTE_OK;
 }
 
 /* ============================================================================
@@ -112,6 +145,7 @@ sw_link_state_t sw_link_get_state(const sw_link_layer_t *link)
 {
     if (!link)
         return SW_LINK_ERROR;
+
     return link->state;
 }
 
@@ -119,5 +153,6 @@ void sw_link_set_state(sw_link_layer_t *link, sw_link_state_t state)
 {
     if (!link)
         return;
+
     link->state = state;
 }

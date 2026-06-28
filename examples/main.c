@@ -1,5 +1,9 @@
-/*
- * EmbeddedSpaceWire Example - Basic packet transmission and routing
+/**
+ * @file main.c
+ * @brief EmbeddedSpaceWire example — SpaceWire packets, routing and CCSDS packet transfer.
+ *
+ * The character/signal and link levels are handled by the SpaceWire hardware
+ * CODEC; this example exercises the packet and network layers in software.
  */
 
 #include "spacewire.h"
@@ -11,70 +15,59 @@
 int main(void)
 {
     printf("===============================================\n");
-    printf("CCSDS Space Wire Protocol - Example\n");
+    printf("SpaceWire packet + network layer - Example\n");
     printf("===============================================\n\n");
 
-    /* ========== CHARACTER CODEC EXAMPLE ========== */
-    printf("[1] Character Codec Test\n");
-    printf("    Encoding/decoding 9-bit characters with parity\n");
+    /* ========== SPACEWIRE PACKET (LOGICAL ADDRESSING) ========== */
+    printf("[1] SpaceWire Packet Test\n");
+    printf("    Building a logical-addressed packet (no CRC; EOP added by link)\n");
 
-    uint8_t data = 0x42; /* 'B' */
-    uint8_t encoded;
-    uint8_t parity = sw_encode_char(data, &encoded);
-    printf("    Input: 0x%02X, Encoded: 0x%02X, Parity: %u\n", data, encoded, parity);
+    const uint8_t cargo_data[] = {0x01, 0x02, 0x03, 0x04, 0x05};
+    const uint8_t logical_dest[] = {0x40}; /* logical address 64 */
 
-    uint8_t decoded;
-    sw_char_result_t result = sw_decode_char(encoded, parity, &decoded);
-    printf("    Decoded: 0x%02X, Result: %d\n", decoded, result);
-    printf("    ✓ Character codec working\n\n");
-
-    /* ========== FRAME ENCODING EXAMPLE ========== */
-    printf("[2] Space Wire Frame Test\n");
-    printf("    Creating and serializing a Space Wire frame\n");
-
-    uint8_t payload_data[] = {0x01, 0x02, 0x03, 0x04, 0x05};
-    sw_frame_t frame;
-    sw_frame_init(&frame);
-    frame.target_addr = 0x02;
-    frame.protocol_id = 1;
-    frame.payload = payload_data;
-    frame.payload_len = sizeof(payload_data);
-
-    uint8_t frame_buf[256];
-    size_t frame_size = sw_frame_encode(&frame, frame_buf, sizeof(frame_buf));
-    printf("    Frame size: %zu bytes\n", frame_size);
-    printf("    Frame data (hex): ");
-    for (size_t i = 0; i < frame_size; i++)
+    uint8_t spw_buf[256];
+    size_t spw_len = sw_spw_packet_build(logical_dest,
+                                         sizeof(logical_dest),
+                                         cargo_data,
+                                         sizeof(cargo_data),
+                                         spw_buf,
+                                         sizeof(spw_buf));
+    printf("    Packet size: %zu bytes\n", spw_len);
+    printf("    Packet data (hex): ");
+    for (size_t i = 0; i < spw_len; i++)
     {
-        printf("%02X ", frame_buf[i]);
+        printf("%02X ", spw_buf[i]);
     }
-    printf("\n    ✓ Frame encoding working\n\n");
+    printf("\n    ✓ Packet build working\n\n");
 
-    /* ========== FRAME DECODING EXAMPLE ========== */
-    printf("[3] Space Wire Frame Decoding Test\n");
-    printf("    Parsing and validating frame CRC\n");
+    /* ========== SPACEWIRE PACKET (PATH ADDRESSING) ========== */
+    printf("[2] SpaceWire Path Addressing Test\n");
+    printf("    Building a multi-hop path-addressed packet\n");
 
-    sw_frame_t decoded_frame;
-    if (sw_frame_decode(&decoded_frame, frame_buf, frame_size))
+    const uint8_t path_dest[] = {2, 1, 3}; /* take port 2, then 1, then 3 */
+    uint8_t path_buf[256];
+    size_t path_len = sw_spw_packet_build(path_dest,
+                                          sizeof(path_dest),
+                                          cargo_data,
+                                          sizeof(cargo_data),
+                                          path_buf,
+                                          sizeof(path_buf));
+    printf("    Path address: %u hops, packet %zu bytes\n", (unsigned)sizeof(path_dest), path_len);
+    printf("    Packet data (hex): ");
+    for (size_t i = 0; i < path_len; i++)
     {
-        printf("    Target address: 0x%02X\n", decoded_frame.target_addr);
-        printf("    Protocol ID: %u\n", decoded_frame.protocol_id);
-        printf("    Payload length: %u bytes\n", decoded_frame.payload_len);
-        printf("    ✓ Frame decoding and CRC validation successful\n\n");
+        printf("%02X ", path_buf[i]);
     }
-    else
-    {
-        printf("    ✗ Frame decoding failed\n\n");
-    }
+    printf("\n    ✓ Path-addressed packet built\n\n");
 
-    /* ========== CCSDS PACKET + SPACE WIRE INTEGRATION ========== */
-    printf("[4] CCSDS Packet + Space Wire Integration\n");
-    printf("    Creating complete packet frame\n");
+    /* ========== CCSDS PACKET + SPACEWIRE INTEGRATION ========== */
+    printf("[3] CCSDS Packet Transfer Protocol\n");
+    printf("    Encapsulating a CCSDS packet (ECSS-E-ST-50-53C)\n");
 
-    sw_packet_config_t pkt_config = {.device_addr = 0x01,
-                                     .target_addr = 0x02,
-                                     .protocol_id = 1,
-                                     .enable_crc = 1};
+    sw_packet_config_t pkt_config = {.path = NULL,
+                                     .path_len = 0,
+                                     .logical_addr = SW_PTP_LOGICAL_ADDR_DEFAULT,
+                                     .user_app = 0x00};
 
     sw_packet_frame_t pf;
     sw_packet_init(&pf, &pkt_config);
@@ -83,8 +76,8 @@ int main(void)
     pf.packet.ph.apid = 0x0042; /* APID = 0x0042 */
     pf.packet.ph.seq_count = 1;
     const char *msg = "Hello Space Wire";
-    pf.packet.payload = (const uint8_t *)msg;
-    pf.packet.payload_len = (uint16_t)strlen(msg);
+    pf.packet.data = (const uint8_t *)msg;
+    pf.packet.data_len = (uint16_t)strlen(msg);
 
     uint8_t pkt_buf[512];
     size_t pkt_size = sw_packet_encode(&pf, pkt_buf, sizeof(pkt_buf));
@@ -97,17 +90,20 @@ int main(void)
     }
 
     /* ========== PACKET DECODING EXAMPLE ========== */
-    printf("[5] Packet Decoding Test\n");
-    printf("    Parsing Space Wire frame and CCSDS packet\n");
+    printf("[4] Packet Decoding Test\n");
+    printf("    Extracting the CCSDS packet at the target\n");
 
     sw_packet_frame_t decoded_pf;
-    if (sw_packet_decode(&decoded_pf, pkt_buf, pkt_size))
+    sw_ptp_status_t status;
+    if (sw_packet_decode(&decoded_pf, pkt_buf, pkt_size, SW_END_EOP, &status) == SW_OK)
     {
         printf("    Decoded APID: 0x%04X\n", decoded_pf.packet.ph.apid);
-        printf("    Decoded payload length: %u bytes\n", decoded_pf.packet.payload_len);
+        printf("    Decoded user application: 0x%02X\n", decoded_pf.user_app);
+        printf("    Decoded payload length: %u bytes\n", decoded_pf.packet.data_len);
         printf("    Decoded payload: \"%.*s\"\n",
-               decoded_pf.packet.payload_len,
-               (const char *)decoded_pf.packet.payload);
+               decoded_pf.packet.data_len,
+               (const char *)decoded_pf.packet.data);
+        printf("    Status: %u (0 = OK)\n", (unsigned)status);
         printf("    ✓ Packet decoding successful\n\n");
     }
     else
@@ -116,72 +112,63 @@ int main(void)
     }
 
     /* ========== ROUTER EXAMPLE ========== */
-    printf("[6] Router Configuration Test\n");
-    printf("    Setting up routing table\n");
+    printf("[5] Router Configuration Test\n");
+    printf("    Setting up a routing table (port 0 = configuration port)\n");
 
     sw_router_t router;
-    sw_router_init(&router, 0x01, 3); /* Device 0x01, 3 ports */
+    sw_router_init(&router, 4); /* ports 0..3 (port 0 = configuration port) */
 
-    sw_router_add_route(&router, 0x02, 0);
-    sw_router_add_route(&router, 0x03, 1);
-    sw_router_add_route(&router, 0x04, 2);
+    sw_router_add_route(&router, 0x40, 1, 0); /* logical 0x40 -> port 1, retain */
+    sw_router_add_route(&router, 0x41, 2, 1); /* logical 0x41 -> port 2, delete */
 
-    printf("    Device address: 0x%02X\n", router.device_addr);
     printf("    Number of ports: %u\n", router.num_ports);
     printf("    Routing table configured:\n");
-    printf("      0x02 -> Port 0\n");
-    printf("      0x03 -> Port 1\n");
-    printf("      0x04 -> Port 2\n");
-
-    /* Simulate link connection */
-    router.links[0].state = SW_LINK_CONNECTED;
-    router.links[1].state = SW_LINK_CONNECTED;
-    router.links[2].state = SW_LINK_CONNECTED;
-
+    printf("      logical 0x40 -> port 1 (address retained)\n");
+    printf("      logical 0x41 -> port 2 (address deleted)\n");
     printf("    ✓ Router initialized\n\n");
 
     /* ========== ROUTING EXAMPLE ========== */
-    printf("[7] Frame Routing Test\n");
-    printf("    Testing packet routing\n");
+    printf("[6] Packet Routing Test\n");
+    printf("    Routing by leading destination-address character\n");
 
-    sw_frame_t route_frame;
-    sw_frame_init(&route_frame);
-    route_frame.target_addr = 0x03;
-    route_frame.protocol_id = 1;
+    uint8_t out_port = 0;
+    uint8_t delete_leading = 0;
 
-    uint8_t output_port;
-    if (sw_router_route_frame(&router, &route_frame, &output_port))
+    /* Logical addressing: leading char 0x40 is looked up in the routing table. */
+    const uint8_t logical_pkt[] = {0x40, 0xAA, 0xBB};
+    if (sw_router_route(&router, logical_pkt, sizeof(logical_pkt), &out_port, &delete_leading) ==
+        SW_ROUTE_OK)
     {
-        printf("    Packet for 0x03 -> routed to port %u\n", output_port);
-        printf("    ✓ Routing successful\n\n");
-    }
-    else
-    {
-        printf("    ✗ Routing failed\n\n");
+        printf("    logical 0x40 -> port %u (delete leading: %u)\n", out_port, delete_leading);
     }
 
-    /* ========== CRC TEST ========== */
-    printf("[8] CRC-16-CCITT Test\n");
-    printf("    Computing CRC for test data\n");
-
-    const uint8_t test_data[] = {0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39};
-    uint16_t crc = sw_crc16(test_data, sizeof(test_data));
-    printf("    Data: \"123456789\"\n");
-    printf("    CRC-16-CCITT: 0x%04X\n", crc);
-    if (crc == 0x31C3)
+    /* Path addressing: leading char 2 selects port 2 directly and is deleted. */
+    const uint8_t path_pkt[] = {2, 0xAA, 0xBB};
+    if (sw_router_route(&router, path_pkt, sizeof(path_pkt), &out_port, &delete_leading) ==
+        SW_ROUTE_OK)
     {
-        printf("    ✓ CRC matches expected value (0x31C3)\n\n");
+        printf("    path 2 -> port %u (delete leading: %u)\n", out_port, delete_leading);
     }
+
+    /* An unconfigured logical address is discarded with an invalid-address error. */
+    const uint8_t bad_pkt[] = {0x77, 0xAA};
+    if (sw_router_route(&router, bad_pkt, sizeof(bad_pkt), &out_port, &delete_leading) ==
+        SW_ROUTE_DISCARD)
+    {
+        printf("    logical 0x77 -> DISCARD (invalid-address errors: %u)\n",
+               router.invalid_address_errors);
+    }
+    printf("    ✓ Routing successful\n\n");
 
     /* ========== STATISTICS ========== */
-    printf("[9] Statistics\n");
+    printf("[7] Statistics\n");
     sw_statistics_t stats;
     sw_get_statistics(&stats);
     printf("    Packets sent: %u\n", stats.packets_sent);
     printf("    Packets received: %u\n", stats.packets_received);
     printf("    Bytes sent: %u\n", stats.bytes_sent);
     printf("    Bytes received: %u\n", stats.bytes_received);
-    printf("    CRC errors: %u\n", stats.crc_errors);
+    printf("    Packets discarded: %u\n", stats.packets_discarded);
     printf("    ✓ Statistics available\n\n");
 
     printf("===============================================\n");
