@@ -23,6 +23,11 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 /* ============================================================================
  * RETURN CODES
  * ============================================================================ */
@@ -259,5 +264,9 @@ sw_link_state_t sw_link_get_state(const sw_link_layer_t *link);
  * @param[in]  state New state.
  */
 void sw_link_set_state(sw_link_layer_t *link, sw_link_state_t state);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* SPACEWIRE_H */
