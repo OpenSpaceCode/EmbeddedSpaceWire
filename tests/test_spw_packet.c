@@ -50,6 +50,18 @@ static int test_packet_build_cargo_only(void)
     return 0;
 }
 
+/* A destination address with no cargo (e.g. an addressed empty-payload frame). */
+static int test_packet_build_dest_only(void)
+{
+    const uint8_t dest[2] = {0x40, 0x05};
+    uint8_t buf[8];
+
+    size_t n = sw_spw_packet_build(dest, sizeof(dest), NULL, 0, buf, sizeof(buf));
+    ASSERT_EQ_INT(2, (int)n);
+    ASSERT_EQ_MEM(buf, dest, sizeof(dest));
+    return 0;
+}
+
 static int test_packet_build_errors(void)
 {
     const uint8_t dest[1] = {0x40};
@@ -74,6 +86,7 @@ test_result_t test_spacewire_spw_packet_run_all(void)
     RUN_TEST(test_packet_build_logical);
     RUN_TEST(test_packet_build_path);
     RUN_TEST(test_packet_build_cargo_only);
+    RUN_TEST(test_packet_build_dest_only);
     RUN_TEST(test_packet_build_errors);
     return (test_result_t){cunit_total_tests - cunit_overall_failures, cunit_total_tests};
 }

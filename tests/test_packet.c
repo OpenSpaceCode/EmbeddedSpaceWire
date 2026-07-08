@@ -275,6 +275,9 @@ static int test_packet_decode_error_paths(void)
 
     /* A NULL status pointer is tolerated. */
     ASSERT_EQ_INT(SW_ERR, sw_packet_decode(&out, buf, 10, SW_END_EOP, NULL));
+
+    /* Invalid arguments with a NULL status pointer must also be tolerated. */
+    ASSERT_EQ_INT(SW_INVALID_PARAM, sw_packet_decode(NULL, buf, sizeof(buf), SW_END_EOP, NULL));
     return 0;
 }
 
