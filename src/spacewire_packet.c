@@ -8,7 +8,7 @@
  * detection.
  */
 
-#include "../include/spacewire_packet.h"
+#include "spacewire_packet.h"
 
 #include <string.h>
 
@@ -61,9 +61,13 @@ size_t sw_packet_encode(const sw_packet_frame_t *pf, uint8_t *buf, size_t buf_le
             return 0;
     }
 
-    /* CCSDS packet length must be within bounds (clause 5.1.2). */
+    /* CCSDS packet length must be within bounds (clause 5.1.2). The upper bound
+     * cannot currently be exceeded: sp_packet_t.data_len is a uint16_t, so the
+     * serialised size is at most 6 + 65535 = 65541 < SW_PTP_CCSDS_MAX_LEN. The
+     * check is kept as a guard should that type ever widen, so its always-false
+     * branch is excluded from branch coverage. */
     const size_t ccsds_len = sp_packet_serialize_size(&pf->packet);
-    if (ccsds_len < SW_PTP_CCSDS_MIN_LEN || ccsds_len > SW_PTP_CCSDS_MAX_LEN)
+    if (ccsds_len < SW_PTP_CCSDS_MIN_LEN || ccsds_len > SW_PTP_CCSDS_MAX_LEN) /* GCOVR_EXCL_BR_LINE */
         return 0;
 
     const size_t total = (size_t)pf->path_len + SW_PTP_HEADER_LEN + ccsds_len;

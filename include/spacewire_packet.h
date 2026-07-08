@@ -12,8 +12,13 @@
 #ifndef SPACEWIRE_PACKET_H
 #define SPACEWIRE_PACKET_H
 
-#include "../external/EmbeddedSpacePacket/include/space_packet.h"
+#include "EmbeddedSpacePacket/include/space_packet.h"
 #include "spacewire.h"
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
 
 /** @brief Protocol Identifier for the CCSDS Packet Transfer Protocol (clause 5.3.3). */
 #define SW_PTP_PROTOCOL_ID 0x02u
@@ -250,5 +255,9 @@ void sw_get_statistics(sw_statistics_t *stats);
  * @brief Reset all statistics counters to zero.
  */
 void sw_reset_statistics(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* SPACEWIRE_PACKET_H */

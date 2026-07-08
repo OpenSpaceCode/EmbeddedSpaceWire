@@ -5,7 +5,7 @@ CFLAGS ?= -O2 -Iinclude -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
 		  -Wmissing-prototypes -Wstrict-prototypes -Wredundant-decls -Wundef \
 		  -std=c99
 AR ?= ar
-CFLAGS += -I./external/EmbeddedSpacePacket/include -fPIC
+CFLAGS += -I./external -fPIC
 
 BUILD_DIR ?= build
 OBJ_DIR := $(BUILD_DIR)/obj

@@ -88,6 +88,26 @@ static int test_router_logical_addressing(void)
     return 0;
 }
 
+/* A configured routing-table entry whose output port no longer exists is
+ * discarded with an invalid-address error (clause 5.6.8.5). sw_router_add_route()
+ * rejects such ports, so the stale entry is injected directly. */
+static int test_router_logical_route_stale_port(void)
+{
+    sw_router_t router;
+    sw_router_init(&router, 4); /* ports 0..3 */
+
+    router.routes[0x40].configured = 1;
+    router.routes[0x40].output_port = 9; /* >= num_ports */
+    router.routes[0x40].delete_addr = 0;
+
+    uint8_t port = 0xFF;
+    uint8_t del = 0xFF;
+    const uint8_t pkt[2] = {0x40, 0x99};
+    ASSERT_EQ_INT(SW_ROUTE_DISCARD, sw_router_route(&router, pkt, sizeof(pkt), &port, &del));
+    ASSERT_EQ_INT(1, (int)router.invalid_address_errors);
+    return 0;
+}
+
 static int test_router_add_route_validation(void)
 {
     sw_router_t router;
@@ -164,6 +184,7 @@ test_result_t test_spacewire_router_run_all(void)
     RUN_TEST(test_router_init);
     RUN_TEST(test_router_path_addressing);
     RUN_TEST(test_router_logical_addressing);
+    RUN_TEST(test_router_logical_route_stale_port);
     RUN_TEST(test_router_add_route_validation);
     RUN_TEST(test_router_route_invalid_args_and_empty);
     RUN_TEST(test_link_layer_state_helpers);
