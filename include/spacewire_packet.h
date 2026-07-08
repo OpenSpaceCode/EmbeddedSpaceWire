@@ -12,7 +12,7 @@
 #ifndef SPACEWIRE_PACKET_H
 #define SPACEWIRE_PACKET_H
 
-#include "../external/EmbeddedSpacePacket/include/space_packet.h"
+#include "EmbeddedSpacePacket/include/space_packet.h"
 #include "spacewire.h"
 
 /** @brief Protocol Identifier for the CCSDS Packet Transfer Protocol (clause 5.3.3). */

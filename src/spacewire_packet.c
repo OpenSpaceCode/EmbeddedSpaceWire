@@ -8,7 +8,7 @@
  * detection.
  */
 
-#include "../include/spacewire_packet.h"
+#include "spacewire_packet.h"
 
 #include <string.h>
 

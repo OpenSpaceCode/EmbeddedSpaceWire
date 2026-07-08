@@ -3,7 +3,7 @@
  * @brief SpaceWire routing switch (ECSS-E-ST-50-12C clause 5.6.8) and link-state helpers.
  */
 
-#include "../include/spacewire.h"
+#include "spacewire.h"
 
 #include <string.h>
 

@@ -7,7 +7,7 @@
  * packet buffer, and no checksum is added.
  */
 
-#include "../include/spacewire.h"
+#include "spacewire.h"
 
 #include <string.h>
 
