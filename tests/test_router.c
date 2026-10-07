@@ -1,20 +1,16 @@
 /**
  * @file test_router.c
- * @brief Unit tests for the SpaceWire router and link-state helpers.
+ * @brief Unit tests for the SpaceWire router.
  */
 #include "cunit.h"
 #include "spacewire.h"
 #include "test_runners.h"
-
-#include <string.h>
 
 static int test_router_init(void)
 {
     sw_router_t router;
     sw_router_init(&router, 4);
     ASSERT_EQ_INT(4, router.num_ports);
-    ASSERT_EQ_INT(0, router.links[0].port_id);
-    ASSERT_EQ_INT(SW_LINK_UNINITIALIZED, router.links[0].state);
     ASSERT_EQ_INT(0, (int)router.invalid_address_errors);
 
     /* num_ports is clamped to [1, SW_NUM_PORTS]. */
@@ -148,37 +144,6 @@ static int test_router_route_invalid_args_and_empty(void)
     return 0;
 }
 
-static int test_link_layer_state_helpers(void)
-{
-    const sw_link_config_t config = {
-        .bit_rate = 1000000,
-        .disconnect_timeout = 2500,
-        .rx_credit_max = 12,
-    };
-
-    sw_link_layer_t link;
-    memset(&link, 0xA5, sizeof(link));
-
-    sw_link_init(NULL, &config);
-    sw_link_init(&link, NULL);
-
-    sw_link_init(&link, &config);
-    ASSERT_EQ_INT(config.bit_rate, link.config.bit_rate);
-    ASSERT_EQ_INT(config.disconnect_timeout, link.config.disconnect_timeout);
-    ASSERT_EQ_INT(config.rx_credit_max, link.rx_credits);
-    ASSERT_EQ_INT(0, link.tx_credits);
-    ASSERT_EQ_INT(SW_LINK_UNINITIALIZED, link.state);
-
-    ASSERT_EQ_INT(SW_LINK_ERROR, sw_link_get_state(NULL));
-    ASSERT_EQ_INT(SW_LINK_UNINITIALIZED, sw_link_get_state(&link));
-
-    sw_link_set_state(NULL, SW_LINK_CONNECTED);
-    sw_link_set_state(&link, SW_LINK_CONNECTED);
-    ASSERT_EQ_INT(SW_LINK_CONNECTED, sw_link_get_state(&link));
-
-    return 0;
-}
-
 test_result_t test_spacewire_router_run_all(void)
 {
     RUN_TEST(test_router_init);
@@ -187,6 +152,5 @@ test_result_t test_spacewire_router_run_all(void)
     RUN_TEST(test_router_logical_route_stale_port);
     RUN_TEST(test_router_add_route_validation);
     RUN_TEST(test_router_route_invalid_args_and_empty);
-    RUN_TEST(test_link_layer_state_helpers);
     return (test_result_t){cunit_total_tests - cunit_overall_failures, cunit_total_tests};
 }

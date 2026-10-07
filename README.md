@@ -47,7 +47,7 @@ EmbeddedSpaceWire/
 │   └── spacewire_payload.h      # Payload adapter hooks
 ├── src/
 │   ├── spacewire_spw_packet.c   # SpaceWire packet builder
-│   ├── spacewire_router.c       # Routing switch + link state
+│   ├── spacewire_router.c       # Routing switch
 │   ├── spacewire_packet.c       # CCSDS packet transfer protocol
 │   └── spacewire_payload.c      # Default (raw-octet) payload hooks
 ├── docs/
@@ -58,7 +58,7 @@ EmbeddedSpaceWire/
 │   ├── cunit.h                  # Tiny C test helpers
 │   ├── test_runners.h           # Suite runner declarations
 │   ├── test_spw_packet.c        # Packet-builder tests
-│   ├── test_router.c            # Routing + link tests
+│   ├── test_router.c            # Routing tests
 │   ├── test_packet.c            # CCSDS PTP tests (+ golden wire vector)
 │   ├── test_payload.c           # Default payload hook tests
 │   ├── test_payload_override.c  # Overridden payload hooks (own binary)
@@ -148,14 +148,14 @@ overrides for CCSDS Space Packets using EmbeddedSpacePacket.
 
 Figures for x86-64:
 
-- **Library code**: ~2.5 KB (`.text`); no dynamic allocation, all buffers caller-owned
+- **Library code**: ~2.2 KB (`.text`); no dynamic allocation, all buffers caller-owned
 - **`sw_packet_frame_t`**: 16 bytes (CCSDS PTP addressing fields)
-- **`sw_router_t`**: ~1.4 KB — a 256-entry routing table (3 B/entry) plus per-port
-  link state; set `-DSW_NUM_PORTS=n` to shrink the per-router footprint
+- **`sw_router_t`**: 784 bytes — a 256-entry routing table (3 B/entry) plus
+  counters
 
 ## Thread Safety
 
-Packet, routing and link operations work entirely on caller-owned state passed
+Packet and routing operations work entirely on caller-owned state passed
 by pointer and take no internal locks, so independent objects can be used from
 independent tasks. The one shared item is the library's statistics block:
 `sw_packet_encode` and `sw_packet_decode` update a process-global counter (read

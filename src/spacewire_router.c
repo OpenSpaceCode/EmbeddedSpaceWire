@@ -1,6 +1,6 @@
 /**
  * @file spacewire_router.c
- * @brief SpaceWire routing switch (ECSS-E-ST-50-12C clause 5.6.8) and link-state helpers.
+ * @brief SpaceWire routing switch (ECSS-E-ST-50-12C clause 5.6.8).
  */
 
 #include "spacewire.h"
@@ -25,12 +25,6 @@ void sw_router_init(sw_router_t *router, uint8_t num_ports)
         num_ports = SW_NUM_PORTS;
 
     router->num_ports = num_ports;
-
-    for (uint8_t i = 0; i < router->num_ports; i++)
-    {
-        router->links[i].port_id = i;
-        router->links[i].state = SW_LINK_UNINITIALIZED;
-    }
 }
 
 /* ============================================================================
@@ -124,35 +118,4 @@ sw_route_result_t sw_router_route(sw_router_t *router,
     router->packets_routed++;
 
     return SW_ROUTE_OK;
-}
-
-/* ============================================================================
- * LINK STATE MANAGEMENT (STUB)
- * ============================================================================ */
-
-void sw_link_init(sw_link_layer_t *link, const sw_link_config_t *config)
-{
-    if (!link || !config)
-        return;
-
-    link->config = *config;
-    link->state = SW_LINK_UNINITIALIZED;
-    link->rx_credits = config->rx_credit_max;
-    link->tx_credits = 0;
-}
-
-sw_link_state_t sw_link_get_state(const sw_link_layer_t *link)
-{
-    if (!link)
-        return SW_LINK_ERROR;
-
-    return link->state;
-}
-
-void sw_link_set_state(sw_link_layer_t *link, sw_link_state_t state)
-{
-    if (!link)
-        return;
-
-    link->state = state;
 }

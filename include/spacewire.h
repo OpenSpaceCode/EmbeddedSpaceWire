@@ -85,13 +85,13 @@ size_t sw_spw_packet_build(const uint8_t *dest,
 /** @brief Highest external port number (clause 5.6.8.2). */
 #define SW_PORT_EXTERNAL_MAX 31u
 
-/**
- * @brief Number of ports a router can have (0..31).
- *
- * Override with `-DSW_NUM_PORTS=n` to shrink the per-router footprint for small
- * nodes.
- */
 #ifndef SW_NUM_PORTS
+/**
+ * @brief Largest number of ports a router can have, configuration port 0
+ *        included (clause 5.6.8.2).
+ *
+ * Override with `-DSW_NUM_PORTS=n` to cap sw_router_init() at fewer ports.
+ */
 #    define SW_NUM_PORTS 32u
 #endif
 
@@ -111,30 +111,6 @@ size_t sw_spw_packet_build(const uint8_t *dest,
 #define SW_ROUTE_TABLE_SIZE 256u
 
 /**
- * @brief SpaceWire link state (clause 5.5.7 link initialisation).
- */
-typedef enum
-{
-    SW_LINK_UNINITIALIZED = 0, /**< Link not yet started. */
-    SW_LINK_READY = 1,         /**< Ready to start. */
-    SW_LINK_STARTED = 2,       /**< Start requested. */
-    SW_LINK_CONNECTED = 3,     /**< Connected and running. */
-    SW_LINK_ERROR = 4          /**< Link error. */
-} sw_link_state_t;
-
-/**
- * @brief Per-port link state and counters.
- */
-typedef struct
-{
-    uint8_t port_id;       /**< Port number. */
-    sw_link_state_t state; /**< Current link state. */
-    uint32_t tx_packets;   /**< Packets transmitted on this port. */
-    uint32_t rx_packets;   /**< Packets received on this port. */
-    uint32_t errors;       /**< Errors observed on this port. */
-} sw_link_t;
-
-/**
  * @brief One routing-table entry mapping a logical address to an output port.
  */
 typedef struct
@@ -145,11 +121,10 @@ typedef struct
 } sw_route_entry_t;
 
 /**
- * @brief A SpaceWire routing switch: ports, a routing table and counters.
+ * @brief A SpaceWire routing switch: a port count, a routing table and counters.
  */
 typedef struct
 {
-    sw_link_t links[SW_NUM_PORTS];                /**< Per-port link state. */
     sw_route_entry_t routes[SW_ROUTE_TABLE_SIZE]; /**< Logical-address routing table. */
     uint8_t num_ports;                            /**< Ports present (port 0 = config). */
     uint32_t invalid_address_errors;              /**< Invalid-address discards (clause 5.6.8.5). */
@@ -212,58 +187,6 @@ sw_route_result_t sw_router_route(sw_router_t *router,
                                   size_t len,
                                   uint8_t *output_port,
                                   uint8_t *delete_leading);
-
-/* ============================================================================
- * SPACEWIRE LINK LAYER
- * ============================================================================ */
-
-/**
- * @brief Host-visible SpaceWire link configuration.
- *
- * The link layer proper (encoding, flow control, link initialisation) lives in
- * the SpaceWire hardware CODEC; these fields configure and observe it.
- */
-typedef struct
-{
-    uint32_t bit_rate;           /**< Signalling rate in bits per second. */
-    uint32_t disconnect_timeout; /**< Disconnect timeout in microseconds. */
-    uint8_t rx_credit_max;       /**< Maximum receive buffer credits. */
-} sw_link_config_t;
-
-/**
- * @brief Link layer state.
- */
-typedef struct
-{
-    sw_link_config_t config; /**< Link configuration. */
-    sw_link_state_t state;   /**< Current link state. */
-    uint8_t rx_credits;      /**< Available receive credits. */
-    uint8_t tx_credits;      /**< Available transmit credits. */
-} sw_link_layer_t;
-
-/**
- * @brief Initialise the link layer from configuration.
- *
- * @param[out] link   Link layer to initialise. No-op if NULL.
- * @param[in]  config Link configuration. No-op if NULL.
- */
-void sw_link_init(sw_link_layer_t *link, const sw_link_config_t *config);
-
-/**
- * @brief Get the current link state.
- *
- * @param[in] link Link layer.
- * @return Current state, or ::SW_LINK_ERROR if @p link is NULL.
- */
-sw_link_state_t sw_link_get_state(const sw_link_layer_t *link);
-
-/**
- * @brief Set the link state.
- *
- * @param[out] link  Link layer. No-op if NULL.
- * @param[in]  state New state.
- */
-void sw_link_set_state(sw_link_layer_t *link, sw_link_state_t state);
 
 #ifdef __cplusplus
 }

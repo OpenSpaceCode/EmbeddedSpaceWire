@@ -482,30 +482,6 @@ static int test_packet_decode_null_args_unchanged(void)
     return 0;
 }
 
-static int test_packet_init(void)
-{
-    static const uint8_t path[2] = {1, 2};
-    const sw_packet_config_t config = {.path = path,
-                                       .path_len = sizeof(path),
-                                       .logical_addr = 0x55,
-                                       .user_app = 0x99};
-    sw_packet_frame_t pf;
-    sw_packet_frame_t untouched;
-    memset(&pf, FILL, sizeof(pf));
-    memcpy(&untouched, &pf, sizeof(pf));
-
-    sw_packet_init(NULL, &config);
-    sw_packet_init(&pf, NULL);
-    ASSERT_EQ_MEM(&pf, &untouched, sizeof(pf));
-
-    sw_packet_init(&pf, &config);
-    ASSERT_TRUE(pf.path == path);
-    ASSERT_EQ_INT(2, pf.path_len);
-    ASSERT_EQ_INT(0x55, pf.logical_addr);
-    ASSERT_EQ_INT(0x99, pf.user_app);
-    return 0;
-}
-
 static int test_packet_create(void)
 {
     uint8_t wire[SAMPLE_WIRE_LEN];
@@ -599,7 +575,6 @@ test_result_t test_spacewire_packet_run_all(void)
     RUN_TEST(test_packet_decode_short_lengths_rejected);
     RUN_TEST(test_packet_decode_payload_length_bounds);
     RUN_TEST(test_packet_decode_null_args_unchanged);
-    RUN_TEST(test_packet_init);
     RUN_TEST(test_packet_create);
     RUN_TEST(test_packet_statistics);
     RUN_TEST(test_packet_virtual_channel);

@@ -32,19 +32,6 @@
 
 static sw_statistics_t g_sw_stats = {0};
 
-void sw_packet_init(sw_packet_frame_t *pf, const sw_packet_config_t *config)
-{
-    if ((!pf) || (!config))
-    {
-        return;
-    }
-
-    pf->path = config->path;
-    pf->path_len = config->path_len;
-    pf->logical_addr = config->logical_addr;
-    pf->user_app = config->user_app;
-}
-
 /**
  * @brief Check that a frame's path address is usable (clause 5.3.1).
  *

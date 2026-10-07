@@ -117,20 +117,6 @@ typedef struct
 } sw_packet_frame_t;
 
 /**
- * @brief Configuration for a CCSDS PTP packet endpoint.
- *
- * @note @p path points into caller-owned memory; the library neither copies nor
- *       frees it.
- */
-typedef struct
-{
-    const uint8_t *path;  /**< Optional path address; NULL if unused. */
-    uint8_t path_len;     /**< Number of path octets. */
-    uint8_t logical_addr; /**< Target Logical Address. */
-    uint8_t user_app;     /**< User Application value. */
-} sw_packet_config_t;
-
-/**
  * @brief Virtual channel number.
  *
  * ECSS-E-ST-50-53C clause 5.3.5 (NOTE 2) allows the User Application field to
@@ -163,14 +149,6 @@ static inline sw_virtual_channel_t sw_packet_virtual_channel(const sw_packet_fra
 {
     return pf ? pf->user_app : (sw_virtual_channel_t)0;
 }
-
-/**
- * @brief Initialise a packet frame from configuration.
- *
- * @param[out] pf     Packet frame to initialise. No-op if NULL.
- * @param[in]  config Endpoint configuration. No-op if NULL.
- */
-void sw_packet_init(sw_packet_frame_t *pf, const sw_packet_config_t *config);
 
 /**
  * @brief Encode a complete CCSDS PTP packet into a buffer.
