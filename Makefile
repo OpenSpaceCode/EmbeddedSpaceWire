@@ -15,8 +15,9 @@ BIN_DIR := $(BUILD_DIR)/bin
 # Source files
 CORE_SRCS := src/spacewire_spw_packet.c \
              src/spacewire_router.c \
-             src/spacewire_packet.c \
-             src/spacewire_payload.c
+             src/spacewire_packet.c
+# Weak default payload hooks, kept apart because an application may replace them.
+WEAK_SRCS := src/weak/spacewire_payload.c
 
 EXAMPLE_SRCS := examples/main.c
 TEST_SRCS := tests/unit_tests.c \
@@ -30,6 +31,7 @@ OVERRIDE_TEST_SRCS := tests/test_payload_override.c
 
 # Object files
 CORE_OBJS := $(patsubst %.c,$(OBJ_DIR)/%.o,$(CORE_SRCS))
+WEAK_OBJS := $(patsubst %.c,$(OBJ_DIR)/%.o,$(WEAK_SRCS))
 EXAMPLE_OBJS := $(patsubst %.c,$(OBJ_DIR)/%.o,$(EXAMPLE_SRCS))
 TEST_OBJS := $(patsubst %.c,$(OBJ_DIR)/%.o,$(TEST_SRCS))
 OVERRIDE_TEST_OBJS := $(patsubst %.c,$(OBJ_DIR)/%.o,$(OVERRIDE_TEST_SRCS))
@@ -48,11 +50,11 @@ all: lib test
 
 lib: $(LIB_STATIC) $(LIB_SHARED)
 
-$(LIB_STATIC): $(CORE_OBJS)
+$(LIB_STATIC): $(CORE_OBJS) $(WEAK_OBJS)
 	@mkdir -p $(dir $@)
 	$(AR) rcs $@ $^
 
-$(LIB_SHARED): $(CORE_OBJS)
+$(LIB_SHARED): $(CORE_OBJS) $(WEAK_OBJS)
 	@mkdir -p $(dir $@)
 	$(CC) -shared -o $@ $^
 

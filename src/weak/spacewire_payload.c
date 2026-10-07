@@ -7,8 +7,9 @@
  * carries as an opaque octet string (::sw_payload_raw_t). An application
  * replaces them by defining the same functions; see the header for the rules.
  *
- * The hooks live in their own translation unit so that a fully overridden
- * build does not link this file at all.
+ * This is the only file in src/weak/. Everything here is replaceable, so an
+ * application that overrides all four hooks can leave the directory out of its
+ * build; linked from the static library, the file is simply not pulled in.
  * See also: docs/space_packet_integration.md
  *
  * OpenSpaceCode — https://github.com/OpenSpaceCode

@@ -7,7 +7,7 @@
  * sw_payload_*() hooks declared here, which keeps this library independent of
  * any particular upper-layer protocol implementation.
  *
- * The library ships weak default hooks (src/spacewire_payload.c) that treat the
+ * The library ships weak default hooks (src/weak/spacewire_payload.c) that treat the
  * payload as raw octets described by ::sw_payload_raw_t. An application that
  * carries a structured protocol, for example CCSDS Space Packets
  * (CCSDS 133.0-B-2), defines the same four functions itself; its definitions

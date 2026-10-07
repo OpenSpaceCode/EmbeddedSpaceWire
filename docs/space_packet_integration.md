@@ -72,6 +72,10 @@ nm app | grep sw_payload_
 
 `T` marks your overrides; `W` means the weak defaults are still in use.
 
+If you compile the library sources into the application instead of linking
+`libspacewire.a`, you can leave `src/weak/` out of the build altogether: it
+holds nothing but the default hooks.
+
 ## 3. Pass `sp_packet_t` as the payload object
 
 ```c

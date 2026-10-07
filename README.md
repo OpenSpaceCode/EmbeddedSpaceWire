@@ -49,7 +49,8 @@ EmbeddedSpaceWire/
 │   ├── spacewire_spw_packet.c   # SpaceWire packet builder
 │   ├── spacewire_router.c       # Routing switch
 │   ├── spacewire_packet.c       # CCSDS packet transfer protocol
-│   └── spacewire_payload.c      # Default (raw-octet) payload hooks
+│   └── weak/
+│       └── spacewire_payload.c  # Default (raw-octet) payload hooks, replaceable
 ├── docs/
 │   └── space_packet_integration.md  # Carrying CCSDS Space Packets
 ├── examples/
@@ -133,10 +134,11 @@ serialises, measures and parses it through four hooks declared in
 | `sw_payload_length()` | Length a received payload declares for itself |
 | `sw_payload_parse()` | Fill a payload object from a received buffer |
 
-The library ships weak default hooks that treat the payload as raw octets
-(`sw_payload_raw_t`), so it works on its own. To carry a structured protocol,
-define the same four functions in the application; they replace the defaults at
-link time.
+The library ships weak default hooks in `src/weak/` that treat the payload as
+raw octets (`sw_payload_raw_t`), so it works on its own. To carry a structured
+protocol, define the same four functions in the application; they replace the
+defaults at link time. An application that compiles the library sources itself
+and overrides all four hooks can leave `src/weak/` out of its build.
 
 The overrides must be linked as an object file. Overrides that exist only
 inside a static library are silently ignored by the linker.
