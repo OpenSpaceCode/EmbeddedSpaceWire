@@ -9,7 +9,7 @@ if [[ "${OUT_FILE}" != /* ]]; then
   OUT_FILE="${ROOT_DIR}/${OUT_FILE}"
 fi
 
-COVERAGE_CFLAGS='-O0 -g --coverage -Iinclude -I./external -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wcast-align -Wcast-qual -Wpointer-arith -Wformat=2 -Wmissing-prototypes -Wstrict-prototypes -Wredundant-decls -Wundef -std=c99'
+COVERAGE_CFLAGS='-O0 -g --coverage -Iinclude -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wcast-align -Wcast-qual -Wpointer-arith -Wformat=2 -Wmissing-prototypes -Wstrict-prototypes -Wredundant-decls -Wundef -std=c99'
 
 cd "${ROOT_DIR}"
 

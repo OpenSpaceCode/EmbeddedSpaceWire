@@ -1,18 +1,22 @@
 /**
- * @file spacewire_packet.h
- * @brief CCSDS Packet Transfer Protocol over SpaceWire (ECSS-E-ST-50-53C).
+ * @file    spacewire_packet.h
+ * @brief   CCSDS Packet Transfer Protocol over SpaceWire (ECSS-E-ST-50-53C)
  *
- * Encapsulates a CCSDS Space Packet (CCSDS 133.0-B-2) into a SpaceWire packet on
- * the send path and extracts it on the receive path. The protocol adds no
- * checksum of its own — ECSS-E-ST-50-53C defines none; error detection is
- * provided by the underlying SpaceWire link (character parity) and by the
- * EOP/EEP end-of-packet markers.
+ * Encapsulates a packet into a SpaceWire packet on the send path and extracts
+ * it on the receive path. The carried packet is opaque to this layer: it is
+ * sized, serialised and parsed through the payload adapter hooks declared in
+ * spacewire_payload.h, which an application overrides to carry CCSDS Space
+ * Packets (CCSDS 133.0-B-2). The protocol adds no checksum of its own —
+ * ECSS-E-ST-50-53C defines none; error detection is provided by the underlying
+ * SpaceWire link (character parity) and by the EOP/EEP end-of-packet markers.
+ * See also: docs/space_packet_integration.md
+ *
+ * OpenSpaceCode — https://github.com/OpenSpaceCode
  */
 
 #ifndef SPACEWIRE_PACKET_H
 #define SPACEWIRE_PACKET_H
 
-#include "EmbeddedSpacePacket/include/space_packet.h"
 #include "spacewire.h"
 
 #ifdef __cplusplus
@@ -86,17 +90,21 @@ typedef enum
 } sw_ptp_status_t;
 
 /**
- * @brief A CCSDS Packet Transfer Protocol packet.
+ * @brief Addressing and encapsulation fields of a CCSDS Packet Transfer Protocol packet.
  *
  * The wire layout produced by sw_packet_encode() follows ECSS-E-ST-50-53C
  * Figure 5-1:
  *
  *     [ Target SpW Address: path, 0..N octets, each 0-31 ]   (optional)
  *     [ Target Logical Address | 0x02 | 0x00 | User Application ]
- *     [ CCSDS Space Packet: 6 + data_len octets ]
+ *     [ Carried packet: 7 to 65542 octets ]
  *
  * followed by an EOP that the link layer appends (not stored in the buffer).
+ * The carried packet is not part of this structure; it is passed to
+ * sw_packet_encode() and sw_packet_decode() as a separate payload object.
  *
+ * @note @p path points into caller-owned memory; the library neither copies nor
+ *       frees it.
  * @note The Target SpaceWire (path) Address is stripped by the network before
  *       the packet reaches the target, so it is absent on the receive path.
  */
@@ -105,12 +113,14 @@ typedef struct
     const uint8_t *path;  /**< Target SpaceWire (path) Address; NULL if unused (clause 5.3.1). */
     uint8_t path_len;     /**< Number of path octets (each must be 0..31). */
     uint8_t logical_addr; /**< Target Logical Address (clause 5.3.2). */
-    uint8_t user_app;   /**< User Application field; may carry a virtual channel (clause 5.3.5). */
-    sp_packet_t packet; /**< Encapsulated CCSDS Space Packet. */
+    uint8_t user_app; /**< User Application field; may carry a virtual channel (clause 5.3.5). */
 } sw_packet_frame_t;
 
 /**
  * @brief Configuration for a CCSDS PTP packet endpoint.
+ *
+ * @note @p path points into caller-owned memory; the library neither copies nor
+ *       frees it.
  */
 typedef struct
 {
@@ -157,9 +167,6 @@ static inline sw_virtual_channel_t sw_packet_virtual_channel(const sw_packet_fra
 /**
  * @brief Initialise a packet frame from configuration.
  *
- * The encapsulated CCSDS packet is zero-initialised; set its header fields and
- * data before encoding.
- *
  * @param[out] pf     Packet frame to initialise. No-op if NULL.
  * @param[in]  config Endpoint configuration. No-op if NULL.
  */
@@ -169,15 +176,25 @@ void sw_packet_init(sw_packet_frame_t *pf, const sw_packet_config_t *config);
  * @brief Encode a complete CCSDS PTP packet into a buffer.
  *
  * Writes the optional path address, the 4-octet encapsulation header and the
- * serialised CCSDS packet. No checksum and no in-band EOP are added.
+ * carried packet, which is sized by sw_payload_size() and serialised by
+ * sw_payload_serialize(). No checksum and no in-band EOP are added.
+ *
+ * On failure, @p buf is left unchanged, provided sw_payload_serialize() honours
+ * its own contract.
  *
  * @param[in]  pf      Packet frame to encode.
+ * @param[in]  payload Payload object handed to the payload adapter hooks; with
+ *                     the default hooks, a ::sw_payload_raw_t.
  * @param[out] buf     Output buffer.
  * @param[in]  buf_len Buffer capacity in octets.
- * @return Octets written, or 0 on error (NULL args, invalid path octet, CCSDS
- *         length out of bounds, or buffer too small).
+ * @return Octets written, or 0 on error (NULL args, invalid path octet, carried
+ *         packet outside ::SW_PTP_CCSDS_MIN_LEN to ::SW_PTP_CCSDS_MAX_LEN octets,
+ *         buffer too small, or a failing payload hook).
  */
-size_t sw_packet_encode(const sw_packet_frame_t *pf, uint8_t *buf, size_t buf_len);
+uint32_t sw_packet_encode(const sw_packet_frame_t *pf,
+                          const void *payload,
+                          uint8_t *buf,
+                          uint32_t buf_len);
 
 /**
  * @brief Decode a received CCSDS PTP packet.
@@ -185,49 +202,55 @@ size_t sw_packet_encode(const sw_packet_frame_t *pf, uint8_t *buf, size_t buf_le
  * The input is the packet as delivered to the target, i.e. with the path address
  * already stripped by the network, beginning at the Target Logical Address:
  *
- *     [ Target Logical Address | 0x02 | 0x00 | User Application | CCSDS packet ]
+ *     [ Target Logical Address | 0x02 | 0x00 | User Application | carried packet ]
  *
- * On a successful return the decoded CCSDS packet, Target Logical Address and
- * User Application value are available in @p pf. On discard the delivered CCSDS
- * packet and User Application value are cleared (clause 5.2.3.2 b).
+ * The carried packet must fill the rest of the buffer: its length, as reported
+ * by sw_payload_length(), has to equal the octets that follow the header. It is
+ * then extracted by sw_payload_parse().
  *
- * @param[out] pf      Decoded packet frame.
+ * On failure, @p pf and @p payload are left unchanged; only @p status is
+ * written. A discarded packet is thereby "null" in the sense of clause
+ * 5.2.3.2 b: nothing is delivered.
+ *
+ * @param[out] pf      Decoded Target Logical Address and User Application value.
+ * @param[out] payload Payload object filled by sw_payload_parse(); with the
+ *                     default hooks, a ::sw_payload_raw_t that points into @p buf.
  * @param[in]  buf     Received buffer to parse.
  * @param[in]  buf_len Buffer length in octets.
  * @param[in]  end     End-of-packet marker reported by the link layer.
  * @param[out] status  Receive status (clause 5.1.3); may be NULL. Set to
  *                      ::SW_PTP_STATUS_OK on delivery, ::SW_PTP_STATUS_EEP or
  *                      ::SW_PTP_STATUS_RESERVED_NONZERO on a recognised discard,
- *                      or ::SW_PTP_STATUS_INVALID for a bad Protocol Id / malformed input.
- * @return ::SW_OK if a valid packet is delivered, ::SW_ERR if it is discarded.
+ *                      or ::SW_PTP_STATUS_INVALID for NULL args, a bad Protocol
+ *                      Identifier or malformed input.
+ * @return ::SW_OK if a valid packet is delivered, ::SW_ERR if it is discarded,
+ *         or ::SW_INVALID_PARAM if @p pf, @p payload or @p buf is NULL.
  */
 sw_result_t sw_packet_decode(sw_packet_frame_t *pf,
+                             void *payload,
                              const uint8_t *buf,
-                             size_t buf_len,
+                             uint32_t buf_len,
                              sw_end_marker_t end,
                              sw_ptp_status_t *status);
 
 /**
- * @brief Build a complete CCSDS PTP packet carrying a single APID payload.
+ * @brief Build a complete CCSDS PTP packet using logical addressing only.
  *
- * Convenience wrapper that uses logical addressing only (no path address).
+ * Convenience wrapper around sw_packet_encode() for a frame without a path
+ * address. On failure, @p buf is left unchanged.
  *
  * @param[in]  logical_addr Target Logical Address.
  * @param[in]  user_app     User Application value.
- * @param[in]  apid         APID — excess bits beyond 11 are masked.
- * @param[in]  payload      CCSDS Packet Data Field (not copied).
- * @param[in]  payload_len  Length of @p payload in octets.
+ * @param[in]  payload      Payload object handed to the payload adapter hooks.
  * @param[out] buf          Output buffer.
  * @param[in]  buf_len      Buffer capacity in octets.
- * @return Octets written, or 0 on error.
+ * @return Octets written, or 0 on error (see sw_packet_encode()).
  */
-size_t sw_packet_create(uint8_t logical_addr,
-                        uint8_t user_app,
-                        uint16_t apid,
-                        const uint8_t *payload,
-                        uint16_t payload_len,
-                        uint8_t *buf,
-                        size_t buf_len);
+uint32_t sw_packet_create(uint8_t logical_addr,
+                          uint8_t user_app,
+                          const void *payload,
+                          uint8_t *buf,
+                          uint32_t buf_len);
 
 /**
  * @brief Cumulative CCSDS PTP traffic counters.

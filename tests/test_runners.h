@@ -14,5 +14,6 @@ typedef struct
 test_result_t test_spacewire_spw_packet_run_all(void);
 test_result_t test_spacewire_router_run_all(void);
 test_result_t test_spacewire_packet_run_all(void);
+test_result_t test_spacewire_payload_run_all(void);
 
 #endif /* TEST_RUNNERS_H */
