@@ -19,23 +19,35 @@ size_t sw_spw_packet_build(const uint8_t *dest,
                            size_t buf_len)
 {
     if (!buf)
+    {
         return 0;
+    }
 
-    if (dest_len > 0 && !dest)
+    if ((dest_len > 0) && (!dest))
+    {
         return 0;
+    }
 
-    if (cargo_len > 0 && !cargo)
+    if ((cargo_len > 0) && (!cargo))
+    {
         return 0;
+    }
 
     const size_t total = dest_len + cargo_len;
-    if (total == 0 || total > buf_len)
+    if ((total == 0) || (total > buf_len))
+    {
         return 0;
+    }
 
     if (dest_len > 0)
+    {
         memcpy(buf, dest, dest_len);
+    }
 
     if (cargo_len > 0)
+    {
         memcpy(&buf[dest_len], cargo, cargo_len);
+    }
 
     return total;
 }

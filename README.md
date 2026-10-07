@@ -159,7 +159,7 @@ Packet and routing operations work entirely on caller-owned state passed
 by pointer and take no internal locks, so independent objects can be used from
 independent tasks. The one shared item is the library's statistics block:
 `sw_packet_encode` and `sw_packet_decode` update a process-global counter (read
-via `sw_get_statistics`, cleared via `sw_reset_statistics`), which is **not**
+via `sw_packet_get_statistics`, cleared via `sw_packet_reset_statistics`), which is **not**
 thread-safe. In a multi-task system, serialise the encode/decode/statistics
 calls or confine them to a single task.
 

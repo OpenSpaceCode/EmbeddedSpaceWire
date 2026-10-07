@@ -9,7 +9,7 @@
 #include <string.h>
 
 /* A logical-addressed packet: one address octet followed by the cargo. */
-static int test_packet_build_logical(void)
+static int test_spw_packet_build_logical(void)
 {
     const uint8_t dest[1] = {0x40};
     const uint8_t cargo[3] = {0xAA, 0xBB, 0xCC};
@@ -24,7 +24,7 @@ static int test_packet_build_logical(void)
 }
 
 /* A path-addressed packet: a multi-hop path address followed by the cargo. */
-static int test_packet_build_path(void)
+static int test_spw_packet_build_path(void)
 {
     const uint8_t dest[3] = {2, 1, 3};
     const uint8_t cargo[2] = {0xDE, 0xAD};
@@ -39,7 +39,7 @@ static int test_packet_build_path(void)
 }
 
 /* A point-to-point link needs no destination address (clause 4.2.3.3). */
-static int test_packet_build_cargo_only(void)
+static int test_spw_packet_build_cargo_only(void)
 {
     const uint8_t cargo[2] = {0x11, 0x22};
     uint8_t buf[8];
@@ -51,7 +51,7 @@ static int test_packet_build_cargo_only(void)
 }
 
 /* A destination address with no cargo (e.g. an addressed empty-payload frame). */
-static int test_packet_build_dest_only(void)
+static int test_spw_packet_build_dest_only(void)
 {
     const uint8_t dest[2] = {0x40, 0x05};
     uint8_t buf[8];
@@ -62,7 +62,7 @@ static int test_packet_build_dest_only(void)
     return 0;
 }
 
-static int test_packet_build_errors(void)
+static int test_spw_packet_build_errors(void)
 {
     const uint8_t dest[1] = {0x40};
     const uint8_t cargo[2] = {0x11, 0x22};
@@ -81,12 +81,29 @@ static int test_packet_build_errors(void)
     return 0;
 }
 
+/* Every rejected call leaves the output buffer exactly as the caller passed it. */
+static int test_spw_packet_build_failure_leaves_buffer_unchanged(void)
+{
+    const uint8_t dest[1] = {0x40};
+    const uint8_t cargo[2] = {0x11, 0x22};
+    const uint8_t untouched[2] = {0x5A, 0x5A};
+    uint8_t buf[2] = {0x5A, 0x5A};
+
+    ASSERT_EQ_INT(0, sw_spw_packet_build(NULL, 1, cargo, 2, buf, sizeof(buf)));
+    ASSERT_EQ_INT(0, sw_spw_packet_build(dest, 1, NULL, 2, buf, sizeof(buf)));
+    ASSERT_EQ_INT(0, sw_spw_packet_build(dest, 1, cargo, 2, buf, sizeof(buf))); /* one short */
+    ASSERT_EQ_INT(0, sw_spw_packet_build(NULL, 0, NULL, 0, buf, sizeof(buf)));
+    ASSERT_EQ_MEM(buf, untouched, sizeof(untouched));
+    return 0;
+}
+
 test_result_t test_spacewire_spw_packet_run_all(void)
 {
-    RUN_TEST(test_packet_build_logical);
-    RUN_TEST(test_packet_build_path);
-    RUN_TEST(test_packet_build_cargo_only);
-    RUN_TEST(test_packet_build_dest_only);
-    RUN_TEST(test_packet_build_errors);
+    RUN_TEST(test_spw_packet_build_logical);
+    RUN_TEST(test_spw_packet_build_path);
+    RUN_TEST(test_spw_packet_build_cargo_only);
+    RUN_TEST(test_spw_packet_build_dest_only);
+    RUN_TEST(test_spw_packet_build_errors);
+    RUN_TEST(test_spw_packet_build_failure_leaves_buffer_unchanged);
     return (test_result_t){cunit_total_tests - cunit_overall_failures, cunit_total_tests};
 }

@@ -183,9 +183,9 @@ static int example_routing(void)
  */
 static void example_statistics(void)
 {
-    sw_statistics_t stats;
+    sw_packet_statistics_t stats;
 
-    sw_get_statistics(&stats);
+    sw_packet_get_statistics(&stats);
     printf("[4] Statistics\n");
     printf("    packets sent/received/discarded: %" PRIu32 "/%" PRIu32 "/%" PRIu32 "\n",
            stats.packets_sent,

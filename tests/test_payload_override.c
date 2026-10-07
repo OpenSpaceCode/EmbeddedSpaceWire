@@ -215,12 +215,12 @@ static int test_override_parse_failure_discards(void)
         return 1;
     }
 
-    sw_statistics_t stats;
-    sw_reset_statistics();
+    sw_packet_statistics_t stats;
+    sw_packet_reset_statistics();
     g_fail_parse = 1;
     const int failed = expect_invalid(wire, TOY_WIRE_LEN);
     g_fail_parse = 0;
-    sw_get_statistics(&stats);
+    sw_packet_get_statistics(&stats);
     free(wire);
 
     ASSERT_EQ_INT(0, failed);
@@ -234,15 +234,15 @@ static int test_override_serialize_failure_leaves_buffer_unchanged(void)
 {
     uint8_t untouched[TOY_WIRE_LEN];
     uint8_t wire[TOY_WIRE_LEN];
-    sw_statistics_t stats;
+    sw_packet_statistics_t stats;
     memset(untouched, FILL, sizeof(untouched));
     memset(wire, FILL, sizeof(wire));
 
-    sw_reset_statistics();
+    sw_packet_reset_statistics();
     g_fail_serialize = 1;
     const uint32_t n = sw_packet_encode(&toy_frame, &toy_packet, wire, sizeof(wire));
     g_fail_serialize = 0;
-    sw_get_statistics(&stats);
+    sw_packet_get_statistics(&stats);
 
     ASSERT_EQ_INT(0, n);
     ASSERT_EQ_MEM(wire, untouched, sizeof(wire));

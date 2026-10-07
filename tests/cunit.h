@@ -55,7 +55,9 @@ static int cunit_total_tests = 0;
         cunit_total_tests++;                                                                       \
         int r = fn();                                                                              \
         if (r == 0)                                                                                \
+        {                                                                                          \
             printf("PASS %s\n", #fn);                                                              \
+        }                                                                                          \
         else                                                                                       \
         {                                                                                          \
             printf("FAIL %s\n", #fn);                                                              \

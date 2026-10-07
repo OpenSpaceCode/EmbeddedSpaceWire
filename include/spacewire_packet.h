@@ -53,14 +53,6 @@ extern "C"
 #define SW_PTP_CCSDS_MAX_LEN 65542u
 
 /**
- * @brief Largest valid path-address octet.
- *
- * A SpaceWire path address character selects an output port and is in the range
- * 0..31 (ECSS-E-ST-50-12C clause 5.6.8.3).
- */
-#define SW_PTP_PATH_OCTET_MAX 31u
-
-/**
  * @brief End-of-packet marker supplied by the SpaceWire link layer
  *        (ECSS-E-ST-50-12C clause 5.4.3.2).
  *
@@ -243,19 +235,19 @@ typedef struct
     uint32_t packets_discarded; /**< Discarded (EEP / Reserved!=0 / bad ID / malformed). */
     uint32_t bytes_sent;        /**< Total octets emitted by sw_packet_encode(). */
     uint32_t bytes_received;    /**< Total octets consumed by successful decode. */
-} sw_statistics_t;
+} sw_packet_statistics_t;
 
 /**
  * @brief Copy the current statistics.
  *
  * @param[out] stats Destination. No-op if NULL.
  */
-void sw_get_statistics(sw_statistics_t *stats);
+void sw_packet_get_statistics(sw_packet_statistics_t *stats);
 
 /**
  * @brief Reset all statistics counters to zero.
  */
-void sw_reset_statistics(void);
+void sw_packet_reset_statistics(void);
 
 #ifdef __cplusplus
 }

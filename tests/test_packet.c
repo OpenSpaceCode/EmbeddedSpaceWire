@@ -506,10 +506,10 @@ static int test_packet_statistics(void)
     uint8_t wire[SAMPLE_WIRE_LEN];
     sw_packet_frame_t pf;
     sw_payload_raw_t payload;
-    sw_statistics_t stats;
+    sw_packet_statistics_t stats;
 
-    sw_reset_statistics();
-    sw_get_statistics(NULL); /* tolerate NULL */
+    sw_packet_reset_statistics();
+    sw_packet_get_statistics(NULL); /* tolerate NULL */
 
     ASSERT_EQ_INT(SAMPLE_WIRE_LEN,
                   sw_packet_encode(&sample_frame, &sample_payload, wire, sizeof(wire)));
@@ -521,15 +521,15 @@ static int test_packet_statistics(void)
     ASSERT_EQ_INT(SW_INVALID_PARAM,
                   sw_packet_decode(NULL, &payload, wire, sizeof(wire), SW_END_EOP, NULL));
 
-    sw_get_statistics(&stats);
+    sw_packet_get_statistics(&stats);
     ASSERT_EQ_INT(1, stats.packets_sent);
     ASSERT_EQ_INT(SAMPLE_WIRE_LEN, stats.bytes_sent);
     ASSERT_EQ_INT(1, stats.packets_received);
     ASSERT_EQ_INT(SAMPLE_WIRE_LEN, stats.bytes_received);
     ASSERT_EQ_INT(2, stats.packets_discarded);
 
-    sw_reset_statistics();
-    sw_get_statistics(&stats);
+    sw_packet_reset_statistics();
+    sw_packet_get_statistics(&stats);
     ASSERT_EQ_INT(0, stats.packets_sent + stats.packets_received + stats.packets_discarded);
     ASSERT_EQ_INT(0, stats.bytes_sent + stats.bytes_received);
     return 0;

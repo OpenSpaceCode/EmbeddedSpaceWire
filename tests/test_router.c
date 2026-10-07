@@ -144,6 +144,55 @@ static int test_router_route_invalid_args_and_empty(void)
     return 0;
 }
 
+/* Every kind of discard leaves both outputs exactly as the caller passed them. */
+static int test_router_route_discard_leaves_outputs_unchanged(void)
+{
+    sw_router_t router;
+    sw_router_init(&router, 4); /* ports 0..3 */
+    router.routes[0x41].configured = 1;
+    router.routes[0x41].output_port = 9; /* stale entry: the port does not exist */
+
+    const uint8_t missing_port[2] = {4, 0x99};    /* path address beyond the last port */
+    const uint8_t unconfigured[2] = {0x40, 0x99}; /* logical address without a route */
+    const uint8_t stale[2] = {0x41, 0x99};
+    uint8_t port = 0xEE;
+    uint8_t del = 0xEE;
+
+    ASSERT_EQ_INT(SW_ROUTE_DISCARD, sw_router_route(NULL, stale, sizeof(stale), &port, &del));
+    ASSERT_EQ_INT(SW_ROUTE_DISCARD, sw_router_route(&router, NULL, sizeof(stale), &port, &del));
+    ASSERT_EQ_INT(SW_ROUTE_DISCARD, sw_router_route(&router, stale, 0, &port, &del));
+    ASSERT_EQ_INT(SW_ROUTE_DISCARD,
+                  sw_router_route(&router, missing_port, sizeof(missing_port), &port, &del));
+    ASSERT_EQ_INT(SW_ROUTE_DISCARD,
+                  sw_router_route(&router, unconfigured, sizeof(unconfigured), &port, &del));
+    ASSERT_EQ_INT(SW_ROUTE_DISCARD, sw_router_route(&router, stale, sizeof(stale), &port, &del));
+
+    ASSERT_EQ_INT(0xEE, port);
+    ASSERT_EQ_INT(0xEE, del);
+    return 0;
+}
+
+/* A rejected call does not disturb the routing table. */
+static int test_router_add_route_failure_leaves_table_unchanged(void)
+{
+    sw_router_t router;
+    sw_router_init(&router, 4); /* ports 0..3 */
+    ASSERT_EQ_INT(SW_OK, sw_router_add_route(&router, 0x40, 2, 1));
+
+    /* Overwriting an existing route with a port that does not exist. */
+    ASSERT_EQ_INT(SW_WRONG_PORT, sw_router_add_route(&router, 0x40, 4, 0));
+    ASSERT_EQ_INT(2, router.routes[0x40].output_port);
+    ASSERT_EQ_INT(1, router.routes[0x40].configured);
+    ASSERT_EQ_INT(1, router.routes[0x40].delete_addr);
+
+    /* Addresses outside 32..254 never reach the table. */
+    ASSERT_EQ_INT(SW_WRONG_ADDRESS, sw_router_add_route(&router, 31, 1, 0));
+    ASSERT_EQ_INT(SW_WRONG_ADDRESS, sw_router_add_route(&router, 255, 1, 0));
+    ASSERT_EQ_INT(0, router.routes[31].configured);
+    ASSERT_EQ_INT(0, router.routes[255].configured);
+    return 0;
+}
+
 test_result_t test_spacewire_router_run_all(void)
 {
     RUN_TEST(test_router_init);
@@ -152,5 +201,7 @@ test_result_t test_spacewire_router_run_all(void)
     RUN_TEST(test_router_logical_route_stale_port);
     RUN_TEST(test_router_add_route_validation);
     RUN_TEST(test_router_route_invalid_args_and_empty);
+    RUN_TEST(test_router_route_discard_leaves_outputs_unchanged);
+    RUN_TEST(test_router_add_route_failure_leaves_table_unchanged);
     return (test_result_t){cunit_total_tests - cunit_overall_failures, cunit_total_tests};
 }

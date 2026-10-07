@@ -30,14 +30,14 @@
 /** @brief Offset of the User Application field in the encapsulation header (clause 5.3.5). */
 #define SW_PTP_OFFSET_USER_APP 3u
 
-static sw_statistics_t g_sw_stats = {0};
+static sw_packet_statistics_t g_sw_stats = {0};
 
 /**
  * @brief Check that a frame's path address is usable (clause 5.3.1).
  *
  * @param[in] pf Packet frame; must be non-NULL.
  * @return 1 if the path is empty, or present with every octet in
- *         0..::SW_PTP_PATH_OCTET_MAX; otherwise 0.
+ *         0..::SW_PATH_ADDR_MAX; otherwise 0.
  */
 static int sw_packet_path_is_valid(const sw_packet_frame_t *pf)
 {
@@ -48,7 +48,7 @@ static int sw_packet_path_is_valid(const sw_packet_frame_t *pf)
 
     for (uint8_t i = 0; i < pf->path_len; i++)
     {
-        if (pf->path[i] > SW_PTP_PATH_OCTET_MAX)
+        if (pf->path[i] > SW_PATH_ADDR_MAX)
         {
             return 0;
         }
@@ -253,7 +253,7 @@ uint32_t sw_packet_create(uint8_t logical_addr,
     return sw_packet_encode(&pf, payload, buf, buf_len);
 }
 
-void sw_get_statistics(sw_statistics_t *stats)
+void sw_packet_get_statistics(sw_packet_statistics_t *stats)
 {
     if (!stats)
     {
@@ -263,7 +263,7 @@ void sw_get_statistics(sw_statistics_t *stats)
     *stats = g_sw_stats;
 }
 
-void sw_reset_statistics(void)
+void sw_packet_reset_statistics(void)
 {
     memset(&g_sw_stats, 0, sizeof(g_sw_stats));
 }

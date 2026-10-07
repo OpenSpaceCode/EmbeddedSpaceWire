@@ -57,7 +57,7 @@ typedef enum
  * by an EOP/EEP marker (clause 5.6.2). The marker is a link-layer control
  * character emitted by the hardware CODEC, so it is not stored in the buffer,
  * and no checksum is added. Copies `[dest][cargo]` into @p buf; either part may
- * be empty (a NULL pointer with length 0).
+ * be empty (a NULL pointer with length 0). On failure, @p buf is left unchanged.
  *
  * @param[in]  dest      Destination-address octets, or NULL if @p dest_len is 0.
  * @param[in]  dest_len  Number of destination-address octets.
@@ -82,9 +82,6 @@ size_t sw_spw_packet_build(const uint8_t *dest,
 /** @brief Configuration port number; reachable by path addressing only (clause 5.6.8.2). */
 #define SW_PORT_CONFIG 0u
 
-/** @brief Highest external port number (clause 5.6.8.2). */
-#define SW_PORT_EXTERNAL_MAX 31u
-
 /** @brief Most ports a router can have, configuration port 0 included (clause 5.6.8.2). */
 #define SW_NUM_PORTS 32u
 
@@ -96,9 +93,6 @@ size_t sw_spw_packet_build(const uint8_t *dest,
 
 /** @brief Reserved logical address that must not be used (clause 5.6.8.4 d). */
 #define SW_LOGICAL_ADDR_RESERVED 255u
-
-/** @brief Default Target Logical Address. */
-#define SW_LOGICAL_ADDR_DEFAULT 254u
 
 /** @brief Routing-table size; indexed directly by the leading data character. */
 #define SW_ROUTE_TABLE_SIZE 256u
@@ -146,12 +140,16 @@ void sw_router_init(sw_router_t *router, uint8_t num_ports);
 /**
  * @brief Configure a logical-address route (clause 5.6.8.4).
  *
+ * On failure, the routing table is left unchanged.
+ *
  * @param[in,out] router       Target router.
  * @param[in]     logical_addr Logical address to route; must be 32..254.
  * @param[in]     output_port  Existing output port to forward through.
  * @param[in]     delete_addr  Non-zero to delete the logical address before
  *                             forwarding (logical-address deletion, clause 5.6.8.6).
- * @return ::SW_OK on success, error code otherwise.
+ * @return ::SW_OK on success, ::SW_INVALID_PARAM if @p router is NULL,
+ *         ::SW_WRONG_ADDRESS if @p logical_addr is outside 32..254, or
+ *         ::SW_WRONG_PORT if the router has no port @p output_port.
  */
 sw_result_t sw_router_add_route(sw_router_t *router,
                                 uint8_t logical_addr,
@@ -165,15 +163,19 @@ sw_result_t sw_router_add_route(sw_router_t *router,
  * logical addresses (32..254) are looked up in the routing table and retained
  * unless the entry requests deletion (Table 5-11, clauses 5.6.8.3–5.6.8.6).
  *
+ * On ::SW_ROUTE_DISCARD, @p output_port and @p delete_leading are left
+ * unchanged.
+ *
  * @param[in,out] router         Router (its counters are updated).
  * @param[in]     packet         Packet octets (the destination address leads).
  * @param[in]     len            Packet length in octets.
- * @param[out]    output_port    Selected output port (valid on ::SW_ROUTE_OK).
+ * @param[out]    output_port    Selected output port.
  * @param[out]    delete_leading 1 if the leading character must be removed before
- *                               forwarding, else 0 (valid on ::SW_ROUTE_OK).
- * @return ::SW_ROUTE_OK to forward, or ::SW_ROUTE_DISCARD to drop the packet. A
- *         non-existent port or unconfigured address also bumps the router's
- *         invalid-address counter (clause 5.6.8.5).
+ *                               forwarding, else 0.
+ * @return ::SW_ROUTE_OK to forward, or ::SW_ROUTE_DISCARD to drop the packet
+ *         (NULL args, empty packet, non-existent port or unconfigured address).
+ *         The last two also bump the router's invalid-address counter
+ *         (clause 5.6.8.5).
  */
 sw_route_result_t sw_router_route(sw_router_t *router,
                                   const uint8_t *packet,
