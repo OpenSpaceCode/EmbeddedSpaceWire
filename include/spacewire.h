@@ -85,15 +85,8 @@ size_t sw_spw_packet_build(const uint8_t *dest,
 /** @brief Highest external port number (clause 5.6.8.2). */
 #define SW_PORT_EXTERNAL_MAX 31u
 
-#ifndef SW_NUM_PORTS
-/**
- * @brief Largest number of ports a router can have, configuration port 0
- *        included (clause 5.6.8.2).
- *
- * Override with `-DSW_NUM_PORTS=n` to cap sw_router_init() at fewer ports.
- */
-#    define SW_NUM_PORTS 32u
-#endif
+/** @brief Most ports a router can have, configuration port 0 included (clause 5.6.8.2). */
+#define SW_NUM_PORTS 32u
 
 /** @brief Largest path-address character; 0..31 select an output port (clause 5.6.8.3). */
 #define SW_PATH_ADDR_MAX 31u
