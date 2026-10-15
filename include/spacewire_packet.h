@@ -81,8 +81,11 @@ typedef enum
  * @brief Receive status reported to the target user application (clauses 5.1.3, 5.2.3.2).
  *
  * The first three values are the status codes defined by the standard.
- * ::SW_PTP_STATUS_INVALID is an implementation sentinel for input that is not a
- * recognisable CCSDS PTP packet.
+ * ::SW_PTP_STATUS_INVALID is not one of them (clauses 5.1.3 b, 5.2.3.2 c allow only
+ * 0x00..0x02); it is an implementation sentinel for input that is not delivered for
+ * other reasons: NULL arguments, fewer octets than the encapsulation header, a
+ * Protocol Identifier other than 0x02 (not a CCSDS PTP packet, clause 5.5.4.1), or
+ * sw_payload_parse() failing.
  */
 typedef enum
 {
@@ -98,7 +101,7 @@ typedef enum
  * The wire layout produced by sw_packet_encode() follows ECSS-E-ST-50-53C
  * Figure 5-1:
  *
- *     [ Target SpW Address: path, 0..N octets, each 0-31 ]   (optional)
+ *     [ Target SpW Address: 0..N octets, each 0-254 ]       (optional)
  *     [ Target Logical Address | 0x02 | 0x00 | User Application ]
  *     [ Carried packet: 7 to 65542 octets ]
  *
@@ -108,14 +111,16 @@ typedef enum
  *
  * @note @p path points into caller-owned memory; the library neither copies nor
  *       frees it.
- * @note The Target SpaceWire (path) Address is stripped by the network before
- *       the packet reaches the target, so it is absent on the receive path.
+ * @note The Target SpaceWire Address is stripped by the network before the
+ *       packet reaches the target, so it is absent on the receive path.
  */
 typedef struct
 {
-    const uint8_t *path;  /**< Target SpaceWire (path) Address; NULL if unused (clause 5.3.1). */
-    uint8_t path_len;     /**< Number of path octets (each must be 0..31). */
-    uint8_t logical_addr; /**< Target Logical Address, 32..254 (clause 5.3.2). */
+    const uint8_t *path;  /**< Target SpaceWire Address; NULL if unused (clause 5.3.1). Path (0..31)
+                           * and regional logical (32..254) octets may be mixed; 255 is reserved. */
+    uint8_t path_len;     /**< Number of Target SpaceWire Address octets. */
+    uint8_t logical_addr; /**< Target Logical Address (clause 5.3.2); 32..254 per ECSS-E-ST-50-12C
+                             clause 5.6.8.4. */
     uint8_t user_app; /**< User Application field; may carry a virtual channel (clause 5.3.5). */
 } sw_packet_frame_t;
 
@@ -175,7 +180,7 @@ static inline sw_virtual_channel_t sw_packet_get_virtual_channel(const sw_packet
 /**
  * @brief Encode a complete CCSDS PTP packet into a buffer.
  *
- * Writes the optional path address, the 4-octet encapsulation header and the
+ * Writes the optional Target SpaceWire Address, the 4-octet encapsulation header and the
  * carried packet, which is sized by sw_payload_size() and serialised by
  * sw_payload_serialize(). No checksum and no in-band EOP are added.
  *
@@ -188,8 +193,9 @@ static inline sw_virtual_channel_t sw_packet_get_virtual_channel(const sw_packet
  * @param[out] buf     Output buffer.
  * @param[in]  buf_len Buffer capacity in octets.
  * @return Octets written, or 0 on error (NULL args, Target Logical Address outside
- *         32..254, invalid path octet, carried packet outside ::SW_PTP_CCSDS_MIN_LEN to
- * ::SW_PTP_CCSDS_MAX_LEN octets, buffer too small, or a failing payload hook).
+ *         32..254, a Target SpaceWire Address octet of 255, carried packet outside
+ *         ::SW_PTP_CCSDS_MIN_LEN to ::SW_PTP_CCSDS_MAX_LEN octets, buffer too small,
+ *         or a failing payload hook).
  */
 uint32_t sw_packet_encode(const sw_packet_frame_t *pf,
                           const void *payload,
@@ -199,14 +205,17 @@ uint32_t sw_packet_encode(const sw_packet_frame_t *pf,
 /**
  * @brief Decode a received CCSDS PTP packet.
  *
- * The input is the packet as delivered to the target, i.e. with the path address
- * already stripped by the network, beginning at the Target Logical Address:
+ * The input is the packet as delivered to the target, i.e. with the Target
+ * SpaceWire Address already stripped by the network, beginning at the Target
+ * Logical Address:
  *
  *     [ Target Logical Address | 0x02 | 0x00 | User Application | carried packet ]
  *
- * The carried packet must fill the rest of the buffer: its length, as reported
- * by sw_payload_length(), has to equal the octets that follow the header. It is
- * then extracted by sw_payload_parse().
+ * Only the header is checked: Protocol Identifier, Reserved field and end
+ * marker (clause 5.5.4). Every octet after the header is handed to
+ * sw_payload_parse() as the carried packet, whatever its length or format
+ * (clauses 4.3, 5.5.4.2 a); the send-side bounds of clause 5.1.2 are not
+ * applied here.
  *
  * On failure, @p pf and @p payload are left unchanged; only @p status is
  * written. A discarded packet is thereby "null" in the sense of clause
@@ -221,8 +230,9 @@ uint32_t sw_packet_encode(const sw_packet_frame_t *pf,
  * @param[out] status  Receive status (clause 5.1.3); may be NULL. Set to
  *                      ::SW_PTP_STATUS_OK on delivery, ::SW_PTP_STATUS_EEP or
  *                      ::SW_PTP_STATUS_RESERVED_NONZERO on a recognised discard,
- *                      or ::SW_PTP_STATUS_INVALID for NULL args, a bad Protocol
- *                      Identifier or malformed input.
+ *                      or ::SW_PTP_STATUS_INVALID for NULL args, fewer than
+ *                      ::SW_PTP_HEADER_LEN octets, a bad Protocol Identifier, or
+ *                      a failing sw_payload_parse().
  * @return ::SW_OK if a valid packet is delivered, ::SW_ERR if it is discarded,
  *         or ::SW_INVALID_PARAM if @p pf, @p payload or @p buf is NULL.
  */

@@ -90,15 +90,6 @@ static int test_payload_serialize_invalid_args_unchanged(void)
     return 0;
 }
 
-/* Raw octets declare no length of their own: all available octets are payload. */
-static int test_payload_length(void)
-{
-    ASSERT_EQ_INT(5, sw_payload_length(sample, sizeof(sample)));
-    ASSERT_EQ_INT(0, sw_payload_length(sample, 0));
-    ASSERT_EQ_INT(0, sw_payload_length(NULL, sizeof(sample)));
-    return 0;
-}
-
 static int test_payload_parse_zero_copy(void)
 {
     sw_payload_raw_t raw = {.data = NULL, .len = 0};
@@ -109,6 +100,11 @@ static int test_payload_parse_zero_copy(void)
 
     ASSERT_EQ_INT(1, sw_payload_parse(&raw, sample, 1));
     ASSERT_EQ_INT(1, raw.len);
+
+    /* An empty carried packet is still delivered (ECSS-E-ST-50-53C clause 5.5.4.2 a). */
+    ASSERT_EQ_INT(1, sw_payload_parse(&raw, sample, 0));
+    ASSERT_TRUE(raw.data == sample);
+    ASSERT_EQ_INT(0, raw.len);
     return 0;
 }
 
@@ -119,7 +115,6 @@ static int test_payload_parse_failure_unchanged(void)
 
     ASSERT_EQ_INT(0, sw_payload_parse(NULL, sample, sizeof(sample)));
     ASSERT_EQ_INT(0, sw_payload_parse(&raw, NULL, sizeof(sample)));
-    ASSERT_EQ_INT(0, sw_payload_parse(&raw, sample, 0));
     ASSERT_TRUE(raw.data == other);
     ASSERT_EQ_INT(1, raw.len);
     return 0;
@@ -131,7 +126,6 @@ test_result_t test_spacewire_payload_run_all(void)
     RUN_TEST(test_payload_serialize_exact_buffer);
     RUN_TEST(test_payload_serialize_short_buffer_unchanged);
     RUN_TEST(test_payload_serialize_invalid_args_unchanged);
-    RUN_TEST(test_payload_length);
     RUN_TEST(test_payload_parse_zero_copy);
     RUN_TEST(test_payload_parse_failure_unchanged);
     return (test_result_t){cunit_total_tests - cunit_overall_failures, cunit_total_tests};

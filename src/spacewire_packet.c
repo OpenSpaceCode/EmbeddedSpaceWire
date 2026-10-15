@@ -36,13 +36,18 @@
 static sw_packet_statistics_t g_sw_stats = {0};
 
 /**
- * @brief Check that a frame's path address is usable (clause 5.3.1).
+ * @brief Check that a frame's Target SpaceWire Address is usable (clause 5.3.1).
+ *
+ * Clause 5.3.1 b allows path and regional addressing, so each octet is either a
+ * path address (0..31) or a logical address (32..254) that a router deletes on the
+ * way (ECSS-E-ST-50-12C clause 5.6.8.6). Only the reserved logical address 255 is
+ * refused (ECSS-E-ST-50-12C clause 5.6.8.4 d).
  *
  * @param[in] pf Packet frame; must be non-NULL.
- * @return 1 if the path is empty, or present with every octet in
- *         0..::SW_PATH_ADDR_MAX; otherwise 0.
+ * @return 1 if the address is empty, or present with no octet equal to
+ *         ::SW_LOGICAL_ADDR_RESERVED; otherwise 0.
  */
-static int sw_packet_path_is_valid(const sw_packet_frame_t *pf)
+static int sw_packet_address_is_valid(const sw_packet_frame_t *pf)
 {
     if ((pf->path_len > 0u) && (!pf->path))
     {
@@ -51,7 +56,7 @@ static int sw_packet_path_is_valid(const sw_packet_frame_t *pf)
 
     for (uint8_t i = 0; i < pf->path_len; i++)
     {
-        if (pf->path[i] > SW_PATH_ADDR_MAX)
+        if (pf->path[i] == SW_LOGICAL_ADDR_RESERVED)
         {
             return 0;
         }
@@ -61,11 +66,11 @@ static int sw_packet_path_is_valid(const sw_packet_frame_t *pf)
 }
 
 /**
- * @brief Write the optional path address and the encapsulation header
+ * @brief Write the optional Target SpaceWire Address and the encapsulation header
  *        (clauses 5.3.1 to 5.3.5).
  *
- * @param[in]  pf  Packet frame with a valid path.
- * @param[out] buf Output buffer with room for the path plus
+ * @param[in]  pf  Packet frame with a valid Target SpaceWire Address.
+ * @param[out] buf Output buffer with room for the address plus
  *                 ::SW_PTP_HEADER_LEN octets.
  */
 static void sw_packet_write_header(const sw_packet_frame_t *pf, uint8_t *buf)
@@ -102,7 +107,7 @@ uint32_t sw_packet_encode(const sw_packet_frame_t *pf,
         return 0;
     }
 
-    if (!sw_packet_path_is_valid(pf))
+    if (!sw_packet_address_is_valid(pf))
     {
         return 0;
     }
@@ -165,8 +170,11 @@ static sw_result_t sw_packet_discard(sw_ptp_status_t *status, sw_ptp_status_t co
 }
 
 /**
- * @brief Run every receive check that does not need the payload object
- *        (clause 5.5.4).
+ * @brief Run the receive checks of clause 5.5.4.
+ *
+ * Only the encapsulation header is checked. The carried packet is passed on
+ * whatever its length or format (clauses 4.3 and 5.5.4.2 a); the payload adapter
+ * alone decides whether it can be extracted.
  *
  * @param[in] buf     Received buffer; must be non-NULL.
  * @param[in] buf_len Buffer length in octets.
@@ -182,9 +190,8 @@ static sw_ptp_status_t sw_packet_check(const uint8_t *buf, uint32_t buf_len, sw_
         return SW_PTP_STATUS_EEP;
     }
 
-    /* clause 5.1.2 bounds the carried packet, and so the whole buffer. */
-    if ((buf_len < (SW_PTP_HEADER_LEN + SW_PTP_CCSDS_MIN_LEN)) ||
-        (buf_len > (SW_PTP_HEADER_LEN + SW_PTP_CCSDS_MAX_LEN)))
+    /* Without a complete header the packet cannot be identified at all. */
+    if (buf_len < SW_PTP_HEADER_LEN)
     {
         return SW_PTP_STATUS_INVALID;
     }
@@ -199,14 +206,6 @@ static sw_ptp_status_t sw_packet_check(const uint8_t *buf, uint32_t buf_len, sw_
     if (buf[SW_PTP_OFFSET_RESERVED] != SW_PTP_RESERVED)
     {
         return SW_PTP_STATUS_RESERVED_NONZERO;
-    }
-
-    /* The carried packet must end exactly where the SpaceWire packet does;
-     * octets missing or left over mean the two layers disagree on its length. */
-    const uint32_t payload_len = buf_len - SW_PTP_HEADER_LEN;
-    if (sw_payload_length(&buf[SW_PTP_HEADER_LEN], payload_len) != payload_len)
-    {
-        return SW_PTP_STATUS_INVALID;
     }
 
     return SW_PTP_STATUS_OK;
@@ -232,8 +231,8 @@ sw_result_t sw_packet_decode(sw_packet_frame_t *pf,
         return sw_packet_discard(status, code);
     }
 
-    /* clause 5.5.4.2: extract the carried packet. This is the last check; the
-     * hook leaves the payload object unchanged when it fails. */
+    /* clause 5.5.4.2: extract the carried packet. A hook that cannot represent it
+     * fails and leaves the payload object unchanged; nothing is delivered then. */
     if (!sw_payload_parse(payload, &buf[SW_PTP_HEADER_LEN], buf_len - SW_PTP_HEADER_LEN))
     {
         return sw_packet_discard(status, SW_PTP_STATUS_INVALID);

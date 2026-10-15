@@ -7,7 +7,9 @@
  * override mechanism and reaches the hook-failure paths of the packet transfer
  * layer that the default raw-octet hooks cannot trigger.
  *
- * The hooks implement a toy length-prefixed protocol: [total length][body].
+ * The hooks implement a toy length-prefixed protocol: [total length][body]. Its
+ * parse hook checks the length prefix itself, since the packet transfer layer
+ * hands it every octet after the header unchecked.
  *
  * Copyright 2026 OpenSpaceCode contributors
  * SPDX-License-Identifier: Apache-2.0
@@ -80,21 +82,13 @@ uint32_t sw_payload_serialize(const void *payload, uint8_t *buf, uint32_t buf_le
     return need;
 }
 
-uint32_t sw_payload_length(const uint8_t *buf, uint32_t buf_len)
-{
-    if (buf_len < TOY_PREFIX_LEN)
-    {
-        return 0;
-    }
-
-    return buf[0];
-}
-
 int sw_payload_parse(void *payload, const uint8_t *buf, uint32_t buf_len)
 {
     toy_packet_t *pkt = payload;
 
-    if ((g_fail_parse) || (buf_len < TOY_PREFIX_LEN))
+    /* Trailing octets beyond the declared length are ignored; a packet cut short fails. */
+    if ((g_fail_parse) || (buf_len < TOY_PREFIX_LEN) || (buf[0] < TOY_PREFIX_LEN) ||
+        (buf[0] > buf_len))
     {
         return 0;
     }
@@ -178,8 +172,9 @@ static int test_override_replaces_defaults(void)
     return 0;
 }
 
-/* The carried packet declares one octet fewer than arrived: a trailing octet. */
-static int test_override_trailing_octet_rejected(void)
+/* A trailing octet is not checked by the packet transfer layer (ECSS-E-ST-50-53C
+ * clause 4.3); every octet reaches the parse hook, which here ignores the extra one. */
+static int test_override_trailing_octet_reaches_hook(void)
 {
     uint8_t *wire = alloc_toy_wire(TOY_WIRE_LEN + 1u);
     if (!wire)
@@ -187,14 +182,18 @@ static int test_override_trailing_octet_rejected(void)
         return 1;
     }
 
-    const int failed = expect_invalid(wire, TOY_WIRE_LEN + 1u);
+    sw_packet_frame_t pf;
+    toy_packet_t pkt = {.body = NULL, .body_len = 0};
+    const sw_result_t result =
+        sw_packet_decode(&pf, &pkt, wire, TOY_WIRE_LEN + 1u, SW_END_EOP, NULL);
     free(wire);
 
-    ASSERT_EQ_INT(0, failed);
+    ASSERT_EQ_INT(SW_OK, result);
+    ASSERT_EQ_INT(TOY_BODY_LEN, pkt.body_len);
     return 0;
 }
 
-/* The carried packet declares one octet more than arrived: it is truncated. */
+/* The carried packet declares one octet more than arrived: the parse hook rejects it. */
 static int test_override_truncated_packet_rejected(void)
 {
     uint8_t *wire = alloc_toy_wire(TOY_WIRE_LEN - 1u);
@@ -256,7 +255,7 @@ static int test_override_serialize_failure_leaves_buffer_unchanged(void)
 int main(void)
 {
     RUN_TEST(test_override_replaces_defaults);
-    RUN_TEST(test_override_trailing_octet_rejected);
+    RUN_TEST(test_override_trailing_octet_reaches_hook);
     RUN_TEST(test_override_truncated_packet_rejected);
     RUN_TEST(test_override_parse_failure_discards);
     RUN_TEST(test_override_serialize_failure_leaves_buffer_unchanged);

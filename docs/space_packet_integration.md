@@ -1,7 +1,7 @@
 # Carrying CCSDS Space Packets
 
 EmbeddedSpaceWire contains no Space Packet code. Its packet transfer layer
-(ECSS-E-ST-50-53C) reaches the packet it carries through four hooks declared in
+(ECSS-E-ST-50-53C) reaches the packet it carries through three hooks declared in
 [`include/spacewire_payload.h`](../include/spacewire_payload.h). The library's
 default hooks treat that packet as raw octets. This guide replaces them so that
 `sw_packet_encode()` and `sw_packet_decode()` work directly on `sp_packet_t`
@@ -29,26 +29,13 @@ uint32_t sw_payload_serialize(const void *payload, uint8_t *buf, uint32_t buf_le
     return sp_packet_serialize(payload, buf, buf_len);
 }
 
-uint32_t sw_payload_length(const uint8_t *buf, uint32_t buf_len)
-{
-    if ((!buf) || (buf_len < SP_PRIMARY_HEADER_LEN))
-    {
-        return 0;
-    }
-
-    /* Packet Data Length field holds (data octets - 1), CCSDS 133.0-B-2 §4.1.3.5. */
-    const uint32_t data_len = (((uint32_t)buf[4] << 8) | buf[5]) + 1u;
-
-    return SP_PRIMARY_HEADER_LEN + data_len;
-}
-
 int sw_payload_parse(void *payload, const uint8_t *buf, uint32_t buf_len)
 {
     return sp_packet_parse(payload, buf, buf_len);
 }
 ```
 
-Define all four. Together they decide what type sits behind the `void *`
+Define all three. Together they decide what type sits behind the `void *`
 payload object; a mix of overridden and default hooks would disagree about it.
 
 ## 2. Link the overrides as an object file
@@ -111,15 +98,24 @@ as the decoded packet is in use.
 
 ## What the receive path rejects
 
-With these overrides, `sw_packet_decode()` returns `SW_ERR` with status
+The packet transfer layer checks only the encapsulation header: end marker,
+Protocol Identifier and Reserved field (clause 5.5.4). It does not check the
+carried packet's length or format (clauses 4.3 and 5.5.4.2 a); every octet after
+the header goes to `sw_payload_parse()`.
+
+With these overrides, `sw_packet_decode()` therefore returns `SW_ERR` with status
 `SW_PTP_STATUS_INVALID`, and leaves `rx_frame` and `rx_pkt` unchanged, when:
 
 | Input | Detected by |
 |---|---|
-| Octets left over after the Space Packet | `sw_payload_length()` differs from the octets received |
-| Space Packet cut short | `sw_payload_length()` differs from the octets received |
+| Fewer than 4 octets (no complete header) | the packet transfer layer |
+| Protocol Identifier other than 0x02 | the packet transfer layer (clause 5.5.4.1) |
+| Fewer than 6 octets after the header | `sp_packet_parse()` |
 | Packet Version Number other than 0 | `sp_packet_parse()` |
-| Carried packet shorter than 7 or longer than 65542 octets | the packet transfer layer itself (clause 5.1.2) |
+| Space Packet cut short | `sp_packet_parse()` |
+
+Octets left over after the Space Packet are not rejected: `sp_packet_parse()`
+reads the length the packet declares and ignores the rest.
 
 ## Contract for any override
 
@@ -131,5 +127,5 @@ The same rules apply if you carry a protocol other than Space Packets:
   untouched when they fail.
 - `sw_payload_serialize()` must return exactly what `sw_payload_size()` returns
   for the same object.
-- `sw_payload_length()` only reads the buffer and returns the length the packet
-  declares for itself.
+- `sw_payload_parse()` receives every octet after the header, unchecked. It must
+  not read past `buf_len`, and returns 0 if it cannot extract a packet.

@@ -331,6 +331,23 @@ static int test_packet_with_path(void)
     return 0;
 }
 
+/* Regional addressing (clause 5.3.1 b): logical-address octets 32..254 may sit in the
+ * Target SpaceWire Address, alone or mixed with path octets. */
+static int test_packet_with_regional_address(void)
+{
+    static const uint8_t address[4] = {3, SW_LOGICAL_ADDR_MIN, 7, SW_LOGICAL_ADDR_RESERVED - 1u};
+    sw_packet_frame_t pf = sample_frame;
+    pf.path = address;
+    pf.path_len = sizeof(address);
+
+    uint8_t wire[sizeof(address) + SAMPLE_WIRE_LEN];
+    ASSERT_EQ_INT(sizeof(wire), sw_packet_encode(&pf, &sample_payload, wire, sizeof(wire)));
+    ASSERT_EQ_MEM(wire, address, sizeof(address));
+    ASSERT_EQ_INT(0x20, wire[sizeof(address)]);
+    ASSERT_EQ_INT(0x02, wire[sizeof(address) + 1u]);
+    return 0;
+}
+
 /* The longest path the frame can describe (255 octets) fits an exact-size buffer. */
 static int test_packet_encode_max_path(void)
 {
@@ -356,7 +373,8 @@ static int test_packet_encode_max_path(void)
 
 static int test_packet_encode_invalid_path_unchanged(void)
 {
-    static const uint8_t bad_path[2] = {31, 32}; /* 32 is the first invalid path octet */
+    /* 254 is the largest usable octet; 255 is the reserved logical address. */
+    static const uint8_t bad_path[2] = {SW_LOGICAL_ADDR_RESERVED - 1u, SW_LOGICAL_ADDR_RESERVED};
     uint8_t wire[2 + SAMPLE_WIRE_LEN];
     memset(wire, FILL, sizeof(wire));
 
@@ -444,10 +462,10 @@ static int test_packet_decode_bad_protocol_id(void)
     return 0;
 }
 
-/* Every input shorter than the header plus the smallest carried packet is rejected. */
+/* Every input shorter than the encapsulation header is rejected. */
 static int test_packet_decode_short_lengths_rejected(void)
 {
-    for (uint32_t len = 0; len < (SW_PTP_HEADER_LEN + SW_PTP_CCSDS_MIN_LEN); len++)
+    for (uint32_t len = 0; len < SW_PTP_HEADER_LEN; len++)
     {
         uint8_t *wire = (uint8_t *)calloc(len ? len : 1u, 1);
         if (!wire)
@@ -466,19 +484,23 @@ static int test_packet_decode_short_lengths_rejected(void)
     return 0;
 }
 
-/* clause 5.1.2 on the receive path: 7 and 65542 octets are delivered, 6 and 65543 are not. */
-static int test_packet_decode_payload_length_bounds(void)
+/* clause 5.5.4.2 a: with a valid header the carried packet is delivered whatever its
+ * length. The send-side bounds of clause 5.1.2 (7..65542) are not applied on receive. */
+static int test_packet_decode_any_payload_length_delivered(void)
 {
-    uint32_t len = 0;
+    static const uint32_t lengths[] = {0u,
+                                       1u,
+                                       SW_PTP_CCSDS_MIN_LEN - 1u,
+                                       SW_PTP_CCSDS_MIN_LEN,
+                                       SW_PTP_CCSDS_MAX_LEN,
+                                       SW_PTP_CCSDS_MAX_LEN + 1u};
 
-    ASSERT_EQ_INT(SW_ERR, decode_payload_of(SW_PTP_CCSDS_MIN_LEN - 1u, &len));
-    ASSERT_EQ_INT(0, len);
-    ASSERT_EQ_INT(SW_OK, decode_payload_of(SW_PTP_CCSDS_MIN_LEN, &len));
-    ASSERT_EQ_INT(SW_PTP_CCSDS_MIN_LEN, len);
-    ASSERT_EQ_INT(SW_OK, decode_payload_of(SW_PTP_CCSDS_MAX_LEN, &len));
-    ASSERT_EQ_INT(SW_PTP_CCSDS_MAX_LEN, len);
-    ASSERT_EQ_INT(SW_ERR, decode_payload_of(SW_PTP_CCSDS_MAX_LEN + 1u, &len));
-    ASSERT_EQ_INT(0, len);
+    for (size_t i = 0; i < (sizeof(lengths) / sizeof(lengths[0])); i++)
+    {
+        uint32_t len = UINT32_MAX;
+        ASSERT_EQ_INT(SW_OK, decode_payload_of(lengths[i], &len));
+        ASSERT_EQ_UINT(lengths[i], len);
+    }
     return 0;
 }
 
@@ -596,6 +618,7 @@ test_result_t test_spacewire_packet_run_all(void)
     RUN_TEST(test_packet_encode_logical_addr_bounds);
     RUN_TEST(test_packet_encode_decode_roundtrip);
     RUN_TEST(test_packet_with_path);
+    RUN_TEST(test_packet_with_regional_address);
     RUN_TEST(test_packet_encode_max_path);
     RUN_TEST(test_packet_encode_invalid_path_unchanged);
     RUN_TEST(test_packet_encode_null_args_unchanged);
@@ -605,7 +628,7 @@ test_result_t test_spacewire_packet_run_all(void)
     RUN_TEST(test_packet_decode_reserved_nonzero);
     RUN_TEST(test_packet_decode_bad_protocol_id);
     RUN_TEST(test_packet_decode_short_lengths_rejected);
-    RUN_TEST(test_packet_decode_payload_length_bounds);
+    RUN_TEST(test_packet_decode_any_payload_length_delivered);
     RUN_TEST(test_packet_decode_null_args_unchanged);
     RUN_TEST(test_packet_create);
     RUN_TEST(test_packet_statistics);

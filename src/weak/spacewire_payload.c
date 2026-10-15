@@ -8,7 +8,7 @@
  * replaces them by defining the same functions; see the header for the rules.
  *
  * This is the only file in src/weak/. Everything here is replaceable, so an
- * application that overrides all four hooks can leave the directory out of its
+ * application that overrides all three hooks can leave the directory out of its
  * build; linked from the static library, the file is simply not pulled in.
  * See also: docs/space_packet_integration.md
  *
@@ -48,21 +48,11 @@ SW_WEAK uint32_t sw_payload_serialize(const void *payload, uint8_t *buf, uint32_
     return raw->len;
 }
 
-SW_WEAK uint32_t sw_payload_length(const uint8_t *buf, uint32_t buf_len)
-{
-    if (!buf)
-    {
-        return 0;
-    }
-
-    return buf_len;
-}
-
 SW_WEAK int sw_payload_parse(void *payload, const uint8_t *buf, uint32_t buf_len)
 {
     sw_payload_raw_t *raw = payload;
 
-    if ((!raw) || (!buf) || (buf_len == 0u))
+    if ((!raw) || (!buf))
     {
         return 0;
     }

@@ -3,18 +3,18 @@
  * @brief   Payload adapter between SpaceWire and the protocol it carries
  *
  * The SpaceWire packet transfer layer (ECSS-E-ST-50-53C, see spacewire_packet.h)
- * never interprets the packet it carries. It reaches it only through the four
+ * never interprets the packet it carries. It reaches it only through the three
  * sw_payload_*() hooks declared here, which keeps this library independent of
  * any particular upper-layer protocol implementation.
  *
  * The library ships weak default hooks (src/weak/spacewire_payload.c) that treat the
  * payload as raw octets described by ::sw_payload_raw_t. An application that
  * carries a structured protocol, for example CCSDS Space Packets
- * (CCSDS 133.0-B-2), defines the same four functions itself; its definitions
+ * (CCSDS 133.0-B-2), defines the same three functions itself; its definitions
  * replace the defaults at link time.
  *
  * Rules for an override:
- * - Define all four hooks, so they agree on the type behind the payload object.
+ * - Define all three hooks, so they agree on the type behind the payload object.
  * - Do not mark the definitions weak; this header deliberately declares the
  *   hooks without ::SW_WEAK.
  * - Link the overrides as an object file. A linker does not pull an archive
@@ -107,31 +107,21 @@ uint32_t sw_payload_size(const void *payload);
 uint32_t sw_payload_serialize(const void *payload, uint8_t *buf, uint32_t buf_len);
 
 /**
- * @brief Return the length a serialised payload declares for itself.
- *
- * Lets the caller check that a received payload fills the space it arrived in,
- * before anything is parsed. An implementation only reads @p buf.
- *
- * Default: raw octets carry no length field, so every available octet belongs
- * to the payload and the result is @p buf_len.
- *
- * @param[in] buf     Start of the serialised payload.
- * @param[in] buf_len Octets available at @p buf.
- * @return Total payload length in octets as declared by its own header, or 0 if
- *         @p buf is NULL or too short or malformed to tell.
- */
-uint32_t sw_payload_length(const uint8_t *buf, uint32_t buf_len);
-
-/**
  * @brief Parse a serialised payload into a payload object.
  *
- * Default: points a ::sw_payload_raw_t at @p buf (zero-copy). On failure,
- * @p payload is left unchanged.
+ * @p buf_len is every octet that followed the encapsulation header, unchecked:
+ * the packet transfer layer does not check the carried packet's length or
+ * format (ECSS-E-ST-50-53C clause 4.3). An implementation must not read past
+ * @p buf_len, and decides itself what to do with octets its packet does not use.
+ * Returning 0 discards the packet.
+ *
+ * Default: points a ::sw_payload_raw_t at @p buf (zero-copy), zero length
+ * included. On failure, @p payload is left unchanged.
  *
  * @param[out] payload Payload object; its type is defined by the hook implementation.
  * @param[in]  buf     Serialised payload.
- * @param[in]  buf_len Payload length in octets.
- * @return 1 on success, 0 on failure (default: NULL args or zero length).
+ * @param[in]  buf_len Octets available at @p buf; may be 0.
+ * @return 1 on success, 0 on failure (default: NULL args).
  */
 int sw_payload_parse(void *payload, const uint8_t *buf, uint32_t buf_len);
 

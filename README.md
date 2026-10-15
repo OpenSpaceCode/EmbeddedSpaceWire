@@ -18,7 +18,7 @@ Minimal, embedded-optimized implementation of the **SpaceWire** packet and netwo
   (32–254) addressing with header deletion (ECSS-E-ST-50-12C §5.6.8)
 - **CCSDS Packet Transfer Protocol**: encapsulation/extraction of the carried
   packet with EOP/EEP receive status (ECSS-E-ST-50-53C)
-- **Payload adapter**: the carried packet is reached through four overridable
+- **Payload adapter**: the carried packet is reached through three overridable
   hooks, so the application plugs in its own Space Packet implementation
 
 ### Scope (hardware boundary)
@@ -187,21 +187,20 @@ See [examples/main.c](examples/main.c).
 ## Payload Adapter
 
 The packet transfer layer never looks inside the packet it carries. It sizes,
-serialises, measures and parses it through four hooks declared in
+serialises and parses it through three hooks declared in
 [include/spacewire_payload.h](include/spacewire_payload.h):
 
 | Hook | Purpose |
 |---|---|
 | `sw_payload_size()` | Serialised size of a payload object |
 | `sw_payload_serialize()` | Write a payload object into the output buffer |
-| `sw_payload_length()` | Length a received payload declares for itself |
 | `sw_payload_parse()` | Fill a payload object from a received buffer |
 
 The library ships weak default hooks in `src/weak/` that treat the payload as
 raw octets (`sw_payload_raw_t`), so it works on its own. To carry a structured
-protocol, define the same four functions in the application; they replace the
+protocol, define the same three functions in the application; they replace the
 defaults at link time. An application that compiles the library sources itself
-and overrides all four hooks can leave `src/weak/` out of its build.
+and overrides all three hooks can leave `src/weak/` out of its build.
 
 The overrides must be linked as an object file. Overrides that exist only
 inside a static library are silently ignored by the linker.
