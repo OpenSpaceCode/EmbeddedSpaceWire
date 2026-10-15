@@ -1,6 +1,10 @@
 CC ?= cc
+# Optimisation / instrumentation flags; overridden by the sanitize target
+OPT ?= -O2
+SANITIZE_OPT = -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined \
+			   -fno-sanitize-recover=all
 # Stronger warnings for code quality; any warning fails the build
-CFLAGS ?= -O2 -Iinclude -Werror -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
+CFLAGS ?= $(OPT) -Iinclude -Werror -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
 		  -Wcast-align -Wcast-qual -Wpointer-arith -Wformat=2 \
 		  -Wmissing-prototypes -Wstrict-prototypes -Wredundant-decls -Wundef \
 		  -std=c99
@@ -43,8 +47,12 @@ EXAMPLE_BIN := $(BIN_DIR)/spacewire_example
 TEST_BIN := $(BIN_DIR)/spacewire_tests
 OVERRIDE_TEST_BIN := $(BIN_DIR)/spacewire_override_tests
 
+# The instrumented build lives apart from the normal one and is removed after the run.
+SANITIZE_DIR := $(BUILD_DIR)/sanitize
+SANITIZE_BINS := spacewire_tests spacewire_override_tests spacewire_example
+
 # Build targets
-.PHONY: all clean test example lib coverage-html help distclean
+.PHONY: all clean test example lib coverage-html sanitize help distclean
 
 all: lib test
 
@@ -88,6 +96,29 @@ clean:
 coverage-html:
 	bash tools/coverage_html.sh
 
+# Rebuild with ASan + UBSan and run both test binaries and the example. Program output is
+# shown only on failure; sanitizer reports go to stderr and are always visible. The
+# instrumented build is removed afterwards, on success and on failure.
+sanitize:
+	@rm -rf $(SANITIZE_DIR)
+	@$(MAKE) --no-print-directory BUILD_DIR=$(SANITIZE_DIR) OPT="$(SANITIZE_OPT)" \
+		$(addprefix $(SANITIZE_DIR)/bin/,$(SANITIZE_BINS)) >/dev/null \
+		|| { rm -rf $(SANITIZE_DIR); exit 1; }
+	@echo "Sanitizers (ASan + UBSan):"
+	@for bin in $(SANITIZE_BINS); do \
+		if ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=print_stacktrace=1 \
+			$(SANITIZE_DIR)/bin/$$bin >$(SANITIZE_DIR)/$$bin.log; then \
+			printf '  %-26s no errors detected\n' "$$bin"; \
+		else \
+			cat $(SANITIZE_DIR)/$$bin.log; \
+			printf '  %-26s FAILED\n' "$$bin"; \
+			rm -rf $(SANITIZE_DIR); \
+			exit 1; \
+		fi; \
+	done
+	@rm -rf $(SANITIZE_DIR)
+	@echo "Result: PASS"
+
 distclean: clean
 	find . -name "*.o" -delete
 
@@ -100,6 +131,7 @@ help:
 	@echo "  example  - Build example application"
 	@echo "  test     - Build and run unit tests (default and overridden payload hooks)"
 	@echo "  coverage-html - Generate HTML coverage report"
+	@echo "  sanitize - Build with ASan + UBSan and run the tests and the example"
 	@echo "  output   - Build artifacts are written to ./build"
 	@echo "  clean    - Remove build artifacts"
 	@echo "  distclean - Clean including object files"
