@@ -93,6 +93,15 @@ uint32_t sw_packet_encode(const sw_packet_frame_t *pf,
         return 0;
     }
 
+    /* A logical address is 32..255 and 255 shall not be used (ECSS-E-ST-50-12C
+     * clause 5.6.8.4 a, d). A value in 0..31 is a path address instead: the first
+     * router would forward the packet to that port number and delete the octet
+     * (clause 5.6.8.3 a, c, e). */
+    if ((pf->logical_addr < SW_LOGICAL_ADDR_MIN) || (pf->logical_addr == SW_LOGICAL_ADDR_RESERVED))
+    {
+        return 0;
+    }
+
     if (!sw_packet_path_is_valid(pf))
     {
         return 0;

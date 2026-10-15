@@ -224,27 +224,55 @@ static int test_packet_wire_format(void)
     return 0;
 }
 
-/* All-zero and all-one header fields are emitted byte-for-byte. */
+/* The lowest and highest valid header field values are emitted byte-for-byte. */
 static int test_packet_wire_format_field_extremes(void)
 {
-    const sw_packet_frame_t zeros = {.path = NULL, .path_len = 0, .logical_addr = 0, .user_app = 0};
-    const sw_packet_frame_t ones = {.path = NULL,
-                                    .path_len = 0,
-                                    .logical_addr = 0xFF,
-                                    .user_app = 0xFF};
+    const sw_packet_frame_t lowest = {.path = NULL,
+                                      .path_len = 0,
+                                      .logical_addr = SW_LOGICAL_ADDR_MIN,
+                                      .user_app = 0x00};
+    const sw_packet_frame_t highest = {.path = NULL,
+                                       .path_len = 0,
+                                       .logical_addr = SW_LOGICAL_ADDR_RESERVED - 1u,
+                                       .user_app = 0xFF};
     uint8_t wire[SAMPLE_WIRE_LEN];
 
-    ASSERT_EQ_INT(SAMPLE_WIRE_LEN, sw_packet_encode(&zeros, &sample_payload, wire, sizeof(wire)));
-    ASSERT_EQ_INT(0x00, wire[0]);
+    ASSERT_EQ_INT(SAMPLE_WIRE_LEN, sw_packet_encode(&lowest, &sample_payload, wire, sizeof(wire)));
+    ASSERT_EQ_INT(0x20, wire[0]);
     ASSERT_EQ_INT(0x02, wire[1]);
     ASSERT_EQ_INT(0x00, wire[2]);
     ASSERT_EQ_INT(0x00, wire[3]);
 
-    ASSERT_EQ_INT(SAMPLE_WIRE_LEN, sw_packet_encode(&ones, &sample_payload, wire, sizeof(wire)));
-    ASSERT_EQ_INT(0xFF, wire[0]);
+    ASSERT_EQ_INT(SAMPLE_WIRE_LEN, sw_packet_encode(&highest, &sample_payload, wire, sizeof(wire)));
+    ASSERT_EQ_INT(0xFE, wire[0]);
     ASSERT_EQ_INT(0x02, wire[1]);
     ASSERT_EQ_INT(0x00, wire[2]);
     ASSERT_EQ_INT(0xFF, wire[3]);
+    return 0;
+}
+
+/* Only 32..254 is a Target Logical Address: 31 would route as a path, 255 is reserved. */
+static int test_packet_encode_logical_addr_bounds(void)
+{
+    uint8_t wire[SAMPLE_WIRE_LEN];
+    sw_packet_frame_t pf = sample_frame;
+    memset(wire, FILL, sizeof(wire));
+
+    pf.logical_addr = SW_LOGICAL_ADDR_MIN - 1u;
+    ASSERT_EQ_INT(0, sw_packet_encode(&pf, &sample_payload, wire, sizeof(wire)));
+    pf.logical_addr = 0;
+    ASSERT_EQ_INT(0, sw_packet_encode(&pf, &sample_payload, wire, sizeof(wire)));
+    pf.logical_addr = SW_LOGICAL_ADDR_RESERVED;
+    ASSERT_EQ_INT(0, sw_packet_encode(&pf, &sample_payload, wire, sizeof(wire)));
+    ASSERT_EQ_INT(
+        0,
+        sw_packet_create(SW_LOGICAL_ADDR_RESERVED, 0, &sample_payload, wire, sizeof(wire)));
+    ASSERT_TRUE(is_untouched(wire, sizeof(wire)));
+
+    pf.logical_addr = SW_LOGICAL_ADDR_MIN;
+    ASSERT_EQ_INT(SAMPLE_WIRE_LEN, sw_packet_encode(&pf, &sample_payload, wire, sizeof(wire)));
+    pf.logical_addr = SW_LOGICAL_ADDR_RESERVED - 1u;
+    ASSERT_EQ_INT(SAMPLE_WIRE_LEN, sw_packet_encode(&pf, &sample_payload, wire, sizeof(wire)));
     return 0;
 }
 
@@ -565,6 +593,7 @@ test_result_t test_spacewire_packet_run_all(void)
 {
     RUN_TEST(test_packet_wire_format);
     RUN_TEST(test_packet_wire_format_field_extremes);
+    RUN_TEST(test_packet_encode_logical_addr_bounds);
     RUN_TEST(test_packet_encode_decode_roundtrip);
     RUN_TEST(test_packet_with_path);
     RUN_TEST(test_packet_encode_max_path);

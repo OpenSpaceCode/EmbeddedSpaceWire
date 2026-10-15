@@ -115,7 +115,7 @@ typedef struct
 {
     const uint8_t *path;  /**< Target SpaceWire (path) Address; NULL if unused (clause 5.3.1). */
     uint8_t path_len;     /**< Number of path octets (each must be 0..31). */
-    uint8_t logical_addr; /**< Target Logical Address (clause 5.3.2). */
+    uint8_t logical_addr; /**< Target Logical Address, 32..254 (clause 5.3.2). */
     uint8_t user_app; /**< User Application field; may carry a virtual channel (clause 5.3.5). */
 } sw_packet_frame_t;
 
@@ -187,9 +187,9 @@ static inline sw_virtual_channel_t sw_packet_virtual_channel(const sw_packet_fra
  *                     the default hooks, a ::sw_payload_raw_t.
  * @param[out] buf     Output buffer.
  * @param[in]  buf_len Buffer capacity in octets.
- * @return Octets written, or 0 on error (NULL args, invalid path octet, carried
- *         packet outside ::SW_PTP_CCSDS_MIN_LEN to ::SW_PTP_CCSDS_MAX_LEN octets,
- *         buffer too small, or a failing payload hook).
+ * @return Octets written, or 0 on error (NULL args, Target Logical Address outside
+ *         32..254, invalid path octet, carried packet outside ::SW_PTP_CCSDS_MIN_LEN to
+ * ::SW_PTP_CCSDS_MAX_LEN octets, buffer too small, or a failing payload hook).
  */
 uint32_t sw_packet_encode(const sw_packet_frame_t *pf,
                           const void *payload,
