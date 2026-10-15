@@ -12,6 +12,9 @@
  * build; linked from the static library, the file is simply not pulled in.
  * See also: docs/space_packet_integration.md
  *
+ * Copyright 2026 OpenSpaceCode contributors
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * OpenSpaceCode — https://github.com/OpenSpaceCode
  */
 

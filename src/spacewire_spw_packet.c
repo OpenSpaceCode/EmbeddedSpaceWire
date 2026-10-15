@@ -1,10 +1,16 @@
 /**
- * @file spacewire_spw_packet.c
- * @brief SpaceWire packet builder (ECSS-E-ST-50-12C clause 5.6.2).
+ * @file    spacewire_spw_packet.c
+ * @brief   SpaceWire packet builder
  *
- * A SpaceWire packet is [destination address][cargo] terminated by an EOP/EEP
- * marker. The marker is a link-layer control character and is not part of the
- * packet buffer, and no checksum is added.
+ * Implements the SpaceWire packet as per ECSS-E-ST-50-12C Rev.1, clause 5.6.2:
+ * [destination address][cargo] terminated by an EOP/EEP marker. The marker is a
+ * link-layer control character and is not part of the packet buffer, and no
+ * checksum is added.
+ *
+ * Copyright 2026 OpenSpaceCode contributors
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * OpenSpaceCode — https://github.com/OpenSpaceCode
  */
 
 #include "spacewire.h"

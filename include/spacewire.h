@@ -1,12 +1,11 @@
 /**
- * @file spacewire.h
- * @brief SpaceWire packet and network (routing) layers.
+ * @file    spacewire.h
+ * @brief   SpaceWire packet builder and routing switch
  *
- * Minimal, embedded-optimized implementation following:
- * - ECSS-E-ST-50-12C Rev.1 (SpaceWire — links, nodes, routers and networks):
- *   the SpaceWire packet structure and routing (this file).
- * - ECSS-E-ST-50-53C (SpaceWire — CCSDS packet transfer protocol): see
- *   spacewire_packet.h.
+ * Minimal, embedded-optimized implementation of the SpaceWire packet
+ * structure and routing as per ECSS-E-ST-50-12C Rev.1 (SpaceWire — links,
+ * nodes, routers and networks), clauses 5.6.2 and 5.6.8. The CCSDS packet
+ * transfer protocol (ECSS-E-ST-50-53C) is declared in spacewire_packet.h.
  *
  * Scope: this library implements the packet and network layers only. The
  * character/signal and data-link levels — character encoding and parity,
@@ -15,6 +14,11 @@
  * the SpaceWire hardware CODEC. EOP/EEP are therefore exchanged with this
  * library as out-of-band metadata (see ::sw_end_marker_t in spacewire_packet.h),
  * not as bytes within packet buffers.
+ *
+ * Copyright 2026 OpenSpaceCode contributors
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * OpenSpaceCode — https://github.com/OpenSpaceCode
  */
 
 #ifndef SPACEWIRE_H
@@ -28,56 +32,9 @@ extern "C"
 {
 #endif
 
-/* ============================================================================
- * RETURN CODES
- * ============================================================================ */
-
-/**
- * @brief Generic success/failure result for functions that report status.
- *
- * Values are chosen so that ::SW_OK is truthy and ::SW_ERR is falsy.
- */
-typedef enum
-{
-    SW_OK = 0,                /**< Operation succeeded, or a packet was delivered. */
-    SW_ERR = -0x01,           /**< Operation failed, or no packet was delivered. */
-    SW_INVALID_PARAM = -0x02, /**< Invalid parameter */
-    SW_WRONG_ADDRESS = -0x03, /**< Invalid address */
-    SW_WRONG_PORT = -0x04,    /**< Invalid port */
-} sw_result_t;
-
-/* ============================================================================
- * SPACEWIRE PACKET (ECSS-E-ST-50-12C clause 5.6.2)
- * ============================================================================ */
-
-/**
- * @brief Build a SpaceWire packet by prefixing a destination address to a cargo.
- *
- * A SpaceWire packet is a destination address followed by cargo and terminated
- * by an EOP/EEP marker (clause 5.6.2). The marker is a link-layer control
- * character emitted by the hardware CODEC, so it is not stored in the buffer,
- * and no checksum is added. Copies `[dest][cargo]` into @p buf; either part may
- * be empty (a NULL pointer with length 0). On failure, @p buf is left unchanged.
- *
- * @param[in]  dest      Destination-address octets, or NULL if @p dest_len is 0.
- * @param[in]  dest_len  Number of destination-address octets.
- * @param[in]  cargo     Cargo octets, or NULL if @p cargo_len is 0.
- * @param[in]  cargo_len Number of cargo octets.
- * @param[out] buf       Output buffer.
- * @param[in]  buf_len   Buffer capacity in octets.
- * @return Total octets written, or 0 on error (a NULL pointer paired with a
- *         non-zero length, an empty result, or a buffer that is too small).
- */
-size_t sw_spw_packet_build(const uint8_t *dest,
-                           size_t dest_len,
-                           const uint8_t *cargo,
-                           size_t cargo_len,
-                           uint8_t *buf,
-                           size_t buf_len);
-
-/* ============================================================================
- * SPACEWIRE ROUTING (ECSS-E-ST-50-12C clause 5.6.8)
- * ============================================================================ */
+/* -------------------------------------------------------------------------
+ * Constants
+ * ---------------------------------------------------------------------- */
 
 /** @brief Configuration port number; reachable by path addressing only (clause 5.6.8.2). */
 #define SW_PORT_CONFIG 0u
@@ -96,6 +53,24 @@ size_t sw_spw_packet_build(const uint8_t *dest,
 
 /** @brief Routing-table size; indexed directly by the leading data character. */
 #define SW_ROUTE_TABLE_SIZE 256u
+
+/* -------------------------------------------------------------------------
+ * Types
+ * ---------------------------------------------------------------------- */
+
+/**
+ * @brief Generic success/failure result for functions that report status.
+ *
+ * ::SW_OK is zero and every error is negative, so `result < 0` tests for failure.
+ */
+typedef enum
+{
+    SW_OK = 0,                /**< Operation succeeded, or a packet was delivered. */
+    SW_ERR = -0x01,           /**< Operation failed, or no packet was delivered. */
+    SW_INVALID_PARAM = -0x02, /**< Invalid parameter */
+    SW_WRONG_ADDRESS = -0x03, /**< Invalid address */
+    SW_WRONG_PORT = -0x04,    /**< Invalid port */
+} sw_result_t;
 
 /**
  * @brief One routing-table entry mapping a logical address to an output port.
@@ -127,6 +102,35 @@ typedef enum
     SW_ROUTE_OK = 0,     /**< Forward via the returned output port. */
     SW_ROUTE_DISCARD = 1 /**< Discard: empty packet, non-existent port, or unconfigured address. */
 } sw_route_result_t;
+
+/* -------------------------------------------------------------------------
+ * Function Declarations
+ * ---------------------------------------------------------------------- */
+
+/**
+ * @brief Build a SpaceWire packet by prefixing a destination address to a cargo.
+ *
+ * A SpaceWire packet is a destination address followed by cargo and terminated
+ * by an EOP/EEP marker (clause 5.6.2). The marker is a link-layer control
+ * character emitted by the hardware CODEC, so it is not stored in the buffer,
+ * and no checksum is added. Copies `[dest][cargo]` into @p buf; either part may
+ * be empty (a NULL pointer with length 0). On failure, @p buf is left unchanged.
+ *
+ * @param[in]  dest      Destination-address octets, or NULL if @p dest_len is 0.
+ * @param[in]  dest_len  Number of destination-address octets.
+ * @param[in]  cargo     Cargo octets, or NULL if @p cargo_len is 0.
+ * @param[in]  cargo_len Number of cargo octets.
+ * @param[out] buf       Output buffer.
+ * @param[in]  buf_len   Buffer capacity in octets.
+ * @return Total octets written, or 0 on error (a NULL pointer paired with a
+ *         non-zero length, an empty result, or a buffer that is too small).
+ */
+size_t sw_spw_packet_build(const uint8_t *dest,
+                           size_t dest_len,
+                           const uint8_t *cargo,
+                           size_t cargo_len,
+                           uint8_t *buf,
+                           size_t buf_len);
 
 /**
  * @brief Initialize a router.

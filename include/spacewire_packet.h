@@ -11,6 +11,9 @@
  * SpaceWire link (character parity) and by the EOP/EEP end-of-packet markers.
  * See also: docs/space_packet_integration.md
  *
+ * Copyright 2026 OpenSpaceCode contributors
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * OpenSpaceCode — https://github.com/OpenSpaceCode
  */
 
@@ -23,6 +26,10 @@
 extern "C"
 {
 #endif
+
+/* -------------------------------------------------------------------------
+ * Constants
+ * ---------------------------------------------------------------------- */
 
 /** @brief Protocol Identifier for the CCSDS Packet Transfer Protocol (clause 5.3.3). */
 #define SW_PTP_PROTOCOL_ID 0x02u
@@ -51,6 +58,10 @@ extern "C"
 /** @brief Maximum CCSDS packet length: 6-octet primary header + 65536 data octets (clause 5.1.2).
  */
 #define SW_PTP_CCSDS_MAX_LEN 65542u
+
+/* -------------------------------------------------------------------------
+ * Types
+ * ---------------------------------------------------------------------- */
 
 /**
  * @brief End-of-packet marker supplied by the SpaceWire link layer
@@ -118,9 +129,28 @@ typedef struct
 typedef uint8_t sw_virtual_channel_t;
 
 /**
+ * @brief Cumulative CCSDS PTP traffic counters.
+ *
+ * @note The statistics are a single process-global instance updated by
+ *       sw_packet_encode() and sw_packet_decode(); access is not thread-safe.
+ */
+typedef struct
+{
+    uint32_t packets_sent;      /**< Successfully encoded packets. */
+    uint32_t packets_received;  /**< Successfully decoded packets. */
+    uint32_t packets_discarded; /**< Discarded (EEP / Reserved!=0 / bad ID / malformed). */
+    uint32_t bytes_sent;        /**< Total octets emitted by sw_packet_encode(). */
+    uint32_t bytes_received;    /**< Total octets consumed by successful decode. */
+} sw_packet_statistics_t;
+
+/* -------------------------------------------------------------------------
+ * Function Declarations
+ * ---------------------------------------------------------------------- */
+
+/**
  * @brief Select a virtual channel by setting the User Application field.
  *
- * @param[out] pf Packet frame. No-op if NULL.
+ * @param[in,out] pf Packet frame. No-op if NULL.
  * @param[in]  vc Virtual channel number.
  */
 static inline void sw_packet_set_virtual_channel(sw_packet_frame_t *pf, sw_virtual_channel_t vc)
@@ -221,21 +251,6 @@ uint32_t sw_packet_create(uint8_t logical_addr,
                           const void *payload,
                           uint8_t *buf,
                           uint32_t buf_len);
-
-/**
- * @brief Cumulative CCSDS PTP traffic counters.
- *
- * @note The statistics are a single process-global instance updated by
- *       sw_packet_encode() and sw_packet_decode(); access is not thread-safe.
- */
-typedef struct
-{
-    uint32_t packets_sent;      /**< Successfully encoded packets. */
-    uint32_t packets_received;  /**< Successfully decoded packets. */
-    uint32_t packets_discarded; /**< Discarded (EEP / Reserved!=0 / bad ID / malformed). */
-    uint32_t bytes_sent;        /**< Total octets emitted by sw_packet_encode(). */
-    uint32_t bytes_received;    /**< Total octets consumed by successful decode. */
-} sw_packet_statistics_t;
 
 /**
  * @brief Copy the current statistics.

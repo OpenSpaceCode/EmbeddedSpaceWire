@@ -9,6 +9,9 @@
  *
  * The hooks implement a toy length-prefixed protocol: [total length][body].
  *
+ * Copyright 2026 OpenSpaceCode contributors
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * OpenSpaceCode — https://github.com/OpenSpaceCode
  */
 #include "cunit.h"

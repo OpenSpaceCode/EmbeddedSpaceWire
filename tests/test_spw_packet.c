@@ -1,6 +1,14 @@
 /**
- * @file test_spw_packet.c
- * @brief Unit tests for the SpaceWire packet builder (sw_spw_packet_build()).
+ * @file    test_spw_packet.c
+ * @brief   Unit tests for the SpaceWire packet builder
+ *
+ * Checks sw_spw_packet_build() against the packet layout of
+ * ECSS-E-ST-50-12C Rev.1, clause 5.6.2.
+ *
+ * Copyright 2026 OpenSpaceCode contributors
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * OpenSpaceCode — https://github.com/OpenSpaceCode
  */
 #include "cunit.h"
 #include "spacewire.h"

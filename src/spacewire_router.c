@@ -1,15 +1,19 @@
 /**
- * @file spacewire_router.c
- * @brief SpaceWire routing switch (ECSS-E-ST-50-12C clause 5.6.8).
+ * @file    spacewire_router.c
+ * @brief   SpaceWire routing switch
+ *
+ * Implements path and logical addressing, header deletion and invalid-address
+ * handling as per ECSS-E-ST-50-12C Rev.1, clause 5.6.8.
+ *
+ * Copyright 2026 OpenSpaceCode contributors
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * OpenSpaceCode — https://github.com/OpenSpaceCode
  */
 
 #include "spacewire.h"
 
 #include <string.h>
-
-/* ============================================================================
- * ROUTER INITIALISATION
- * ============================================================================ */
 
 void sw_router_init(sw_router_t *router, uint8_t num_ports)
 {
@@ -32,10 +36,6 @@ void sw_router_init(sw_router_t *router, uint8_t num_ports)
 
     router->num_ports = num_ports;
 }
-
-/* ============================================================================
- * ROUTING CONFIGURATION
- * ============================================================================ */
 
 sw_result_t sw_router_add_route(sw_router_t *router,
                                 uint8_t logical_addr,
@@ -64,10 +64,6 @@ sw_result_t sw_router_add_route(sw_router_t *router,
 
     return SW_OK;
 }
-
-/* ============================================================================
- * ROUTING DECISION
- * ============================================================================ */
 
 /**
  * @brief Discard a packet whose leading address references a non-existent port

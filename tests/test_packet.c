@@ -6,6 +6,9 @@
  * ::sw_payload_raw_t. The hook-failure paths that the defaults cannot trigger
  * are covered by test_payload_override.c.
  *
+ * Copyright 2026 OpenSpaceCode contributors
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * OpenSpaceCode — https://github.com/OpenSpaceCode
  */
 #include "cunit.h"

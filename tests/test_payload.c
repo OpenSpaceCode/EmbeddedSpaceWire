@@ -2,6 +2,9 @@
  * @file    test_payload.c
  * @brief   Unit tests for the default (raw-octet) payload adapter hooks
  *
+ * Copyright 2026 OpenSpaceCode contributors
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * OpenSpaceCode — https://github.com/OpenSpaceCode
  */
 #include "cunit.h"

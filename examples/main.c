@@ -7,6 +7,9 @@
  * link levels are handled by the SpaceWire hardware CODEC.
  * See also: docs/space_packet_integration.md
  *
+ * Copyright 2026 OpenSpaceCode contributors
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * OpenSpaceCode — https://github.com/OpenSpaceCode
  */
 
