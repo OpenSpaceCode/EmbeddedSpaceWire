@@ -6,20 +6,57 @@
 #include "spacewire.h"
 #include "test_runners.h"
 
+#include <stdlib.h>
 #include <string.h>
+
+/** @brief Fill value used to detect writes into a buffer that must stay untouched. */
+#define FILL 0x5Au
+
+/**
+ * @brief Build a packet into an exact-size heap buffer and compare it with the expected octets.
+ *
+ * The buffer is exactly @p expected_len octets, so ASan flags any overrun.
+ *
+ * @param[in] dest         Destination-address octets, or NULL.
+ * @param[in] dest_len     Number of destination-address octets.
+ * @param[in] cargo        Cargo octets, or NULL.
+ * @param[in] cargo_len    Number of cargo octets.
+ * @param[in] expected     Expected packet octets.
+ * @param[in] expected_len Expected packet length.
+ * @return 0 if the packet was built exactly as expected, 1 otherwise.
+ */
+static int build_exact(const uint8_t *dest,
+                       size_t dest_len,
+                       const uint8_t *cargo,
+                       size_t cargo_len,
+                       const uint8_t *expected,
+                       size_t expected_len)
+{
+    uint8_t *buf = (uint8_t *)malloc(expected_len);
+    if (!buf)
+    {
+        return 1;
+    }
+
+    const size_t n = sw_spw_packet_build(dest, dest_len, cargo, cargo_len, buf, expected_len);
+    const int matches = (n == expected_len) && (memcmp(buf, expected, expected_len) == 0);
+    free(buf);
+
+    ASSERT_EQ_UINT(expected_len, n);
+    ASSERT_TRUE(matches);
+    return 0;
+}
 
 /* A logical-addressed packet: one address octet followed by the cargo. */
 static int test_spw_packet_build_logical(void)
 {
     const uint8_t dest[1] = {0x40};
     const uint8_t cargo[3] = {0xAA, 0xBB, 0xCC};
-    uint8_t buf[16];
-
-    size_t n = sw_spw_packet_build(dest, sizeof(dest), cargo, sizeof(cargo), buf, sizeof(buf));
-    ASSERT_EQ_INT(4, (int)n);
-
     const uint8_t expected[4] = {0x40, 0xAA, 0xBB, 0xCC};
-    ASSERT_EQ_MEM(buf, expected, sizeof(expected));
+
+    ASSERT_EQ_INT(
+        0,
+        build_exact(dest, sizeof(dest), cargo, sizeof(cargo), expected, sizeof(expected)));
     return 0;
 }
 
@@ -28,13 +65,11 @@ static int test_spw_packet_build_path(void)
 {
     const uint8_t dest[3] = {2, 1, 3};
     const uint8_t cargo[2] = {0xDE, 0xAD};
-    uint8_t buf[16];
-
-    size_t n = sw_spw_packet_build(dest, sizeof(dest), cargo, sizeof(cargo), buf, sizeof(buf));
-    ASSERT_EQ_INT(5, (int)n);
-
     const uint8_t expected[5] = {2, 1, 3, 0xDE, 0xAD};
-    ASSERT_EQ_MEM(buf, expected, sizeof(expected));
+
+    ASSERT_EQ_INT(
+        0,
+        build_exact(dest, sizeof(dest), cargo, sizeof(cargo), expected, sizeof(expected)));
     return 0;
 }
 
@@ -42,11 +77,8 @@ static int test_spw_packet_build_path(void)
 static int test_spw_packet_build_cargo_only(void)
 {
     const uint8_t cargo[2] = {0x11, 0x22};
-    uint8_t buf[8];
 
-    size_t n = sw_spw_packet_build(NULL, 0, cargo, sizeof(cargo), buf, sizeof(buf));
-    ASSERT_EQ_INT(2, (int)n);
-    ASSERT_EQ_MEM(buf, cargo, sizeof(cargo));
+    ASSERT_EQ_INT(0, build_exact(NULL, 0, cargo, sizeof(cargo), cargo, sizeof(cargo)));
     return 0;
 }
 
@@ -54,11 +86,43 @@ static int test_spw_packet_build_cargo_only(void)
 static int test_spw_packet_build_dest_only(void)
 {
     const uint8_t dest[2] = {0x40, 0x05};
-    uint8_t buf[8];
 
-    size_t n = sw_spw_packet_build(dest, sizeof(dest), NULL, 0, buf, sizeof(buf));
-    ASSERT_EQ_INT(2, (int)n);
-    ASSERT_EQ_MEM(buf, dest, sizeof(dest));
+    ASSERT_EQ_INT(0, build_exact(dest, sizeof(dest), NULL, 0, dest, sizeof(dest)));
+    return 0;
+}
+
+/* The smallest packet (one octet) fits an exact one-octet buffer. */
+static int test_spw_packet_build_single_octet(void)
+{
+    const uint8_t dest[1] = {0x07};
+
+    ASSERT_EQ_INT(0, build_exact(dest, sizeof(dest), NULL, 0, dest, sizeof(dest)));
+    return 0;
+}
+
+/* One octet short of the packet: rejected, and the heap buffer is left untouched. */
+static int test_spw_packet_build_one_short(void)
+{
+    const uint8_t dest[1] = {0x40};
+    const uint8_t cargo[3] = {0xAA, 0xBB, 0xCC};
+    const size_t one_short = sizeof(dest) + sizeof(cargo) - 1u;
+    uint8_t *buf = (uint8_t *)malloc(one_short);
+    if (!buf)
+    {
+        return 1;
+    }
+    memset(buf, FILL, one_short);
+
+    const size_t n = sw_spw_packet_build(dest, sizeof(dest), cargo, sizeof(cargo), buf, one_short);
+    int untouched = 1;
+    for (size_t i = 0; i < one_short; i++)
+    {
+        untouched = (untouched) && (buf[i] == FILL);
+    }
+    free(buf);
+
+    ASSERT_EQ_UINT(0, n);
+    ASSERT_TRUE(untouched);
     return 0;
 }
 
@@ -103,6 +167,8 @@ test_result_t test_spacewire_spw_packet_run_all(void)
     RUN_TEST(test_spw_packet_build_path);
     RUN_TEST(test_spw_packet_build_cargo_only);
     RUN_TEST(test_spw_packet_build_dest_only);
+    RUN_TEST(test_spw_packet_build_single_octet);
+    RUN_TEST(test_spw_packet_build_one_short);
     RUN_TEST(test_spw_packet_build_errors);
     RUN_TEST(test_spw_packet_build_failure_leaves_buffer_unchanged);
     return (test_result_t){cunit_total_tests - cunit_overall_failures, cunit_total_tests};

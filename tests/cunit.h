@@ -28,6 +28,21 @@ static int cunit_total_tests = 0;
         }                                                                                          \
     } while (0)
 
+/** @brief Fail the test unless two unsigned values are equal, compared without truncation. */
+#define ASSERT_EQ_UINT(expected, actual)                                                           \
+    do                                                                                             \
+    {                                                                                              \
+        if ((unsigned long long)(expected) != (unsigned long long)(actual))                        \
+        {                                                                                          \
+            printf("ASSERT_EQ_UINT failed: %s:%d: expected %llu got %llu\n",                       \
+                   __FILE__,                                                                       \
+                   __LINE__,                                                                       \
+                   (unsigned long long)(expected),                                                 \
+                   (unsigned long long)(actual));                                                  \
+            return 1;                                                                              \
+        }                                                                                          \
+    } while (0)
+
 #define ASSERT_EQ_MEM(a, b, len)                                                                   \
     do                                                                                             \
     {                                                                                              \

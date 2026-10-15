@@ -12,14 +12,26 @@ static int test_router_init(void)
     sw_router_init(&router, 4);
     ASSERT_EQ_INT(4, router.num_ports);
     ASSERT_EQ_INT(0, (int)router.invalid_address_errors);
-
-    /* num_ports is clamped to [1, SW_NUM_PORTS]. */
-    sw_router_init(&router, 0);
-    ASSERT_EQ_INT(1, router.num_ports);
-    sw_router_init(&router, 200);
-    ASSERT_EQ_INT(SW_NUM_PORTS, router.num_ports);
+    ASSERT_EQ_INT(0, (int)router.packets_routed);
+    ASSERT_EQ_INT(0, (int)router.packets_discarded);
 
     sw_router_init(NULL, 4); /* must not crash */
+    return 0;
+}
+
+/* num_ports is clamped to [1, SW_NUM_PORTS]: each limit and its neighbour. */
+static int test_router_init_port_count_bounds(void)
+{
+    sw_router_t router;
+
+    sw_router_init(&router, 0);
+    ASSERT_EQ_INT(1, router.num_ports);
+    sw_router_init(&router, 1);
+    ASSERT_EQ_INT(1, router.num_ports);
+    sw_router_init(&router, SW_NUM_PORTS);
+    ASSERT_EQ_INT(SW_NUM_PORTS, router.num_ports);
+    sw_router_init(&router, SW_NUM_PORTS + 1u);
+    ASSERT_EQ_INT(SW_NUM_PORTS, router.num_ports);
     return 0;
 }
 
@@ -47,6 +59,60 @@ static int test_router_path_addressing(void)
     const uint8_t bad[2] = {20, 0x11};
     ASSERT_EQ_INT(SW_ROUTE_DISCARD, sw_router_route(&router, bad, sizeof(bad), &port, &del));
     ASSERT_EQ_INT(1, (int)router.invalid_address_errors);
+    ASSERT_EQ_INT(2, (int)router.packets_routed);
+    ASSERT_EQ_INT(1, (int)router.packets_discarded);
+    return 0;
+}
+
+/* Path addressing: the last existing port is reachable, the next one is not. */
+static int test_router_path_port_bounds(void)
+{
+    sw_router_t router;
+    sw_router_init(&router, 8); /* ports 0..7 */
+
+    uint8_t port = 0xEE;
+    uint8_t del = 0xEE;
+    const uint8_t last_port[1] = {7};
+    const uint8_t first_missing[1] = {8};
+
+    ASSERT_EQ_INT(SW_ROUTE_OK, sw_router_route(&router, last_port, sizeof(last_port), &port, &del));
+    ASSERT_EQ_INT(7, port);
+    ASSERT_EQ_INT(1, del);
+    ASSERT_EQ_INT(SW_ROUTE_DISCARD,
+                  sw_router_route(&router, first_missing, sizeof(first_missing), &port, &del));
+    ASSERT_EQ_INT(1, (int)router.packets_routed);
+    ASSERT_EQ_INT(1, (int)router.invalid_address_errors);
+    return 0;
+}
+
+/* 31 is the highest path address; 32 is the lowest logical address (clauses 5.6.8.3-4). */
+static int test_router_path_logical_boundary(void)
+{
+    sw_router_t router;
+    sw_router_init(&router, SW_NUM_PORTS); /* ports 0..31 */
+
+    uint8_t port = 0xEE;
+    uint8_t del = 0xEE;
+    const uint8_t highest_path[1] = {31};
+    const uint8_t lowest_logical[1] = {32};
+
+    ASSERT_EQ_INT(SW_ROUTE_OK,
+                  sw_router_route(&router, highest_path, sizeof(highest_path), &port, &del));
+    ASSERT_EQ_INT(31, port);
+    ASSERT_EQ_INT(1, del);
+
+    /* Unconfigured, 32 is an invalid logical address, not a path to port 32. */
+    ASSERT_EQ_INT(SW_ROUTE_DISCARD,
+                  sw_router_route(&router, lowest_logical, sizeof(lowest_logical), &port, &del));
+    ASSERT_EQ_INT(1, (int)router.invalid_address_errors);
+
+    /* Configured, it follows the routing table and keeps its address. */
+    ASSERT_EQ_INT(SW_OK, sw_router_add_route(&router, 32, 5, 0));
+    ASSERT_EQ_INT(SW_ROUTE_OK,
+                  sw_router_route(&router, lowest_logical, sizeof(lowest_logical), &port, &del));
+    ASSERT_EQ_INT(5, port);
+    ASSERT_EQ_INT(0, del);
+    ASSERT_EQ_INT(2, (int)router.packets_routed);
     return 0;
 }
 
@@ -81,6 +147,8 @@ static int test_router_logical_addressing(void)
     const uint8_t p4[2] = {0xFF, 0x99};
     ASSERT_EQ_INT(SW_ROUTE_DISCARD, sw_router_route(&router, p4, sizeof(p4), &port, &del));
     ASSERT_EQ_INT(2, (int)router.invalid_address_errors);
+    ASSERT_EQ_INT(2, (int)router.packets_routed);
+    ASSERT_EQ_INT(2, (int)router.packets_discarded);
     return 0;
 }
 
@@ -110,8 +178,9 @@ static int test_router_add_route_validation(void)
     sw_router_init(&router, 4); /* ports 0..3 */
 
     ASSERT_EQ_INT(SW_INVALID_PARAM, sw_router_add_route(NULL, 0x40, 1, 0));
-    /* A path-range address may not be used as a logical route. */
+    /* A path-range address may not be used as a logical route; 31 is the highest. */
     ASSERT_EQ_INT(SW_WRONG_ADDRESS, sw_router_add_route(&router, 0x10, 1, 0));
+    ASSERT_EQ_INT(SW_WRONG_ADDRESS, sw_router_add_route(&router, 31, 1, 0));
     /* The reserved address 255 may not be configured. */
     ASSERT_EQ_INT(SW_WRONG_ADDRESS, sw_router_add_route(&router, 0xFF, 1, 0));
     /* Output port must exist. */
@@ -196,7 +265,10 @@ static int test_router_add_route_failure_leaves_table_unchanged(void)
 test_result_t test_spacewire_router_run_all(void)
 {
     RUN_TEST(test_router_init);
+    RUN_TEST(test_router_init_port_count_bounds);
     RUN_TEST(test_router_path_addressing);
+    RUN_TEST(test_router_path_port_bounds);
+    RUN_TEST(test_router_path_logical_boundary);
     RUN_TEST(test_router_logical_addressing);
     RUN_TEST(test_router_logical_route_stale_port);
     RUN_TEST(test_router_add_route_validation);
