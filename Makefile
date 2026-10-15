@@ -54,7 +54,7 @@ SANITIZE_BINS := spacewire_tests spacewire_override_tests spacewire_example
 # Build targets
 .PHONY: all clean test example lib coverage-html sanitize help distclean
 
-all: lib test
+all: lib test example
 
 lib: $(LIB_STATIC) $(LIB_SHARED)
 
@@ -67,15 +67,15 @@ $(LIB_SHARED): $(CORE_OBJS) $(WEAK_OBJS)
 	$(CC) -shared -o $@ $^
 
 example: $(EXAMPLE_BIN)
-	./$(EXAMPLE_BIN)
+	$(EXAMPLE_BIN)
 
 $(EXAMPLE_BIN): $(EXAMPLE_OBJS) $(LIB_STATIC)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ $^
 
 test: $(TEST_BIN) $(OVERRIDE_TEST_BIN)
-	./$(TEST_BIN)
-	./$(OVERRIDE_TEST_BIN)
+	$(TEST_BIN)
+	$(OVERRIDE_TEST_BIN)
 
 $(TEST_BIN): $(TEST_OBJS) $(LIB_STATIC)
 	@mkdir -p $(dir $@)
@@ -85,9 +85,14 @@ $(OVERRIDE_TEST_BIN): $(OVERRIDE_TEST_OBJS) $(LIB_STATIC)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ $^
 
+# -MMD -MP write a .d file next to each object listing the headers it includes, so a
+# header edit rebuilds exactly the objects that depend on it.
 $(OBJ_DIR)/%.o: %.c
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c -o $@ $<
+	$(CC) $(CFLAGS) -MMD -MP -c -o $@ $<
+
+-include $(CORE_OBJS:.o=.d) $(WEAK_OBJS:.o=.d) $(EXAMPLE_OBJS:.o=.d) $(TEST_OBJS:.o=.d) \
+	$(OVERRIDE_TEST_OBJS:.o=.d)
 
 clean:
 	rm -rf $(BUILD_DIR)
@@ -126,9 +131,9 @@ help:
 	@echo "EmbeddedSpaceWire Build System"
 	@echo "=============================="
 	@echo "Targets:"
-	@echo "  all      - Build library and examples (default)"
+	@echo "  all      - Build the libraries, run the unit tests and the example (default)"
 	@echo "  lib      - Build static and shared libraries"
-	@echo "  example  - Build example application"
+	@echo "  example  - Build and run the example application"
 	@echo "  test     - Build and run unit tests (default and overridden payload hooks)"
 	@echo "  coverage-html - Generate HTML coverage report"
 	@echo "  sanitize - Build with ASan + UBSan and run the tests and the example"
