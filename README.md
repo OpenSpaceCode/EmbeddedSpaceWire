@@ -65,12 +65,33 @@ EmbeddedSpaceWire/
 │   ├── test_payload_override.c  # Overridden payload hooks (own binary)
 │   └── unit_tests.c             # Test runner
 ├── tools/
-│   └── coverage_html.sh     # HTML coverage generator
+│   └── coverage_html.sh         # HTML coverage report + 100% gate
+├── .github/workflows/
+│   └── ci.yml                   # CI: tests, coverage, sanitizers, format
+├── .clang-format                # Code style
 ├── Makefile
 └── README.md
 ```
 
 ## Building
+
+### Requirements
+
+- A C99 compiler. The build must be warning-free under both **gcc** and
+  **clang**; CI checks both.
+- `make` and `ar`
+- Optional: `gcovr` for coverage, `clang-format` for the format check
+
+Pick the compiler with `CC`:
+
+```bash
+make CC=gcc
+make CC=clang
+```
+
+The Makefile builds with `-Werror` and a strict warning set (`-Wall -Wextra
+-Wpedantic -Wconversion -Wshadow` and others), so any warning fails the build.
+`OPT` sets the optimisation flags (default `-O2`), e.g. `make OPT="-O0 -g"`.
 
 ### Build Everything
 
@@ -102,13 +123,55 @@ Two binaries are built and run: `build/bin/spacewire_tests` uses the default
 payload hooks, and `build/bin/spacewire_override_tests` replaces them with its
 own.
 
+### Sanitizers
+
+```bash
+make sanitize
+make sanitize CC=clang
+```
+
+Rebuilds the library, both test binaries and the example with AddressSanitizer
+and UndefinedBehaviorSanitizer (leak detection on, every report fatal), runs
+them, and prints one result line per binary. Program output is shown only on
+failure. The instrumented build goes to `build/sanitize/` and is removed
+afterwards.
+
 ### Coverage (HTML)
 
 ```bash
 make coverage-html
 ```
 
-Coverage report is generated at `build/coverage/index.html`.
+Requires `gcovr`. Runs `make clean` first, so any existing `build/` output is
+removed. It then builds instrumented tests in `build/coverage-build/`, runs
+both test binaries, and writes the report to `build/coverage/index.html`.
+Coverage of `src/` must be **100% line and 100% branch**; below that the
+command still writes the report, then exits non-zero.
+
+### Formatting
+
+Code style is defined in [.clang-format](.clang-format). Check every C file
+with:
+
+```bash
+git ls-files '*.c' '*.h' | xargs clang-format --dry-run --Werror
+```
+
+Drop `--dry-run --Werror` and add `-i` to reformat in place.
+
+### Continuous Integration
+
+[.github/workflows/ci.yml](.github/workflows/ci.yml) runs on every push to
+`main` and on every pull request:
+
+| Job | What it checks |
+|---|---|
+| Unit tests | `make` with gcc and with clang: libraries, both test binaries, example |
+| Coverage | `make coverage-html`; fails below 100% line or branch; report uploaded as an artifact |
+| Sanitizers | `make sanitize` with gcc and with clang |
+| clang-format | Every tracked `.c` and `.h` file matches `.clang-format` |
+
+Run the same checks locally before pushing.
 
 ### Clean
 
