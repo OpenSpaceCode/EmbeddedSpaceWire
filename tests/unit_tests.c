@@ -33,8 +33,8 @@ int main(void)
     total_passed += r.passed;
     total_tests += r.total;
 
-    r = test_spacewire_packet_run_all();
-    REPORT("packet", r);
+    r = test_spacewire_ptp_run_all();
+    REPORT("ptp", r);
     total_passed += r.passed;
     total_tests += r.total;
 

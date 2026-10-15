@@ -2,7 +2,7 @@
  * @file    spacewire_payload.h
  * @brief   Payload adapter between SpaceWire and the protocol it carries
  *
- * The SpaceWire packet transfer layer (ECSS-E-ST-50-53C, see spacewire_packet.h)
+ * The SpaceWire packet transfer layer (ECSS-E-ST-50-53C, see spacewire_ptp.h)
  * never interprets the packet it carries. It reaches it only through the three
  * sw_payload_*() hooks declared here, which keeps this library independent of
  * any particular upper-layer protocol implementation.

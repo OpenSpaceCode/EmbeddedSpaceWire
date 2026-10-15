@@ -4,7 +4,7 @@ EmbeddedSpaceWire contains no Space Packet code. Its packet transfer layer
 (ECSS-E-ST-50-53C) reaches the packet it carries through three hooks declared in
 [`include/spacewire_payload.h`](../include/spacewire_payload.h). The library's
 default hooks treat that packet as raw octets. This guide replaces them so that
-`sw_packet_encode()` and `sw_packet_decode()` work directly on `sp_packet_t`
+`sw_ptp_encode()` and `sw_ptp_decode()` work directly on `sp_packet_t`
 objects from [EmbeddedSpacePacket](https://github.com/OpenSpaceCode/EmbeddedSpacePacket).
 
 The code below was built and run against EmbeddedSpacePacket v2.0.0 with gcc
@@ -67,7 +67,7 @@ holds nothing but the default hooks.
 
 ```c
 #include "space_packet.h"
-#include "spacewire_packet.h"
+#include "spacewire_ptp.h"
 
 static const uint8_t data[] = {0xDE, 0xAD, 0xBE, 0xEF};
 
@@ -76,18 +76,18 @@ sp_packet_init(&pkt);
 sp_set_primary_header(&pkt, SP_PACKET_TYPE_TC, 0, 0x042, SP_SEQ_FLAG_UNSEGMENTED, 1);
 sp_set_data(&pkt, data, sizeof(data));
 
-const sw_packet_frame_t frame = {.path = NULL,
+const sw_ptp_frame_t frame = {.path = NULL,
                                  .path_len = 0,
                                  .logical_addr = SW_PTP_LOGICAL_ADDR_DEFAULT,
                                  .user_app = 0x00};
 uint8_t wire[64];
-const uint32_t n = sw_packet_encode(&frame, &pkt, wire, sizeof(wire));
+const uint32_t n = sw_ptp_encode(&frame, &pkt, wire, sizeof(wire));
 /* wire: FE 02 00 00 | 10 42 C0 01 00 03 | DE AD BE EF */
 
-sw_packet_frame_t rx_frame;
+sw_ptp_frame_t rx_frame;
 sp_packet_t rx_pkt;
 sw_ptp_status_t status;
-if (sw_packet_decode(&rx_frame, &rx_pkt, wire, n, SW_END_EOP, &status) == SW_OK)
+if (sw_ptp_decode(&rx_frame, &rx_pkt, wire, n, SW_END_EOP, &status) == SW_OK)
 {
     /* rx_pkt.ph.apid == 0x042; rx_pkt.data points into wire (zero-copy). */
 }
@@ -103,7 +103,7 @@ Protocol Identifier and Reserved field (clause 5.5.4). It does not check the
 carried packet's length or format (clauses 4.3 and 5.5.4.2 a); every octet after
 the header goes to `sw_payload_parse()`.
 
-With these overrides, `sw_packet_decode()` therefore returns `SW_ERR` with status
+With these overrides, `sw_ptp_decode()` therefore returns `SW_ERR` with status
 `SW_PTP_STATUS_INVALID`, and leaves `rx_frame` and `rx_pkt` unchanged, when:
 
 | Input | Detected by |
@@ -122,8 +122,8 @@ reads the length the packet declares and ignores the rest.
 The same rules apply if you carry a protocol other than Space Packets:
 
 - Report errors through the return value: 0 from every hook means failure.
-- Leave outputs unchanged on failure. `sw_packet_encode()` and
-  `sw_packet_decode()` rely on this to keep their own buffers and objects
+- Leave outputs unchanged on failure. `sw_ptp_encode()` and
+  `sw_ptp_decode()` rely on this to keep their own buffers and objects
   untouched when they fail.
 - `sw_payload_serialize()` must return exactly what `sw_payload_size()` returns
   for the same object.

@@ -1,5 +1,5 @@
 /**
- * @file    spacewire_packet.c
+ * @file    spacewire_ptp.c
  * @brief   CCSDS Packet Transfer Protocol over SpaceWire
  *
  * Implements the encapsulation and extraction of ECSS-E-ST-50-53C clause 5.
@@ -15,7 +15,7 @@
  * OpenSpaceCode — https://github.com/OpenSpaceCode
  */
 
-#include "spacewire_packet.h"
+#include "spacewire_ptp.h"
 
 #include "spacewire_payload.h"
 
@@ -33,7 +33,7 @@
 /** @brief Offset of the User Application field in the encapsulation header (clause 5.3.5). */
 #define SW_PTP_OFFSET_USER_APP 3u
 
-static sw_packet_statistics_t g_sw_stats = {0};
+static sw_ptp_statistics_t g_sw_stats = {0};
 
 /**
  * @brief Check that a frame's Target SpaceWire Address is usable (clause 5.3.1).
@@ -47,7 +47,7 @@ static sw_packet_statistics_t g_sw_stats = {0};
  * @return 1 if the address is empty, or present with no octet equal to
  *         ::SW_LOGICAL_ADDR_RESERVED; otherwise 0.
  */
-static int sw_packet_address_is_valid(const sw_packet_frame_t *pf)
+static int sw_ptp_address_is_valid(const sw_ptp_frame_t *pf)
 {
     if ((pf->path_len > 0u) && (!pf->path))
     {
@@ -73,7 +73,7 @@ static int sw_packet_address_is_valid(const sw_packet_frame_t *pf)
  * @param[out] buf Output buffer with room for the address plus
  *                 ::SW_PTP_HEADER_LEN octets.
  */
-static void sw_packet_write_header(const sw_packet_frame_t *pf, uint8_t *buf)
+static void sw_ptp_write_header(const sw_ptp_frame_t *pf, uint8_t *buf)
 {
     uint8_t *header = &buf[pf->path_len];
 
@@ -88,10 +88,10 @@ static void sw_packet_write_header(const sw_packet_frame_t *pf, uint8_t *buf)
     header[SW_PTP_OFFSET_USER_APP] = pf->user_app;
 }
 
-uint32_t sw_packet_encode(const sw_packet_frame_t *pf,
-                          const void *payload,
-                          uint8_t *buf,
-                          uint32_t buf_len)
+uint32_t sw_ptp_encode(const sw_ptp_frame_t *pf,
+                       const void *payload,
+                       uint8_t *buf,
+                       uint32_t buf_len)
 {
     if ((!pf) || (!payload) || (!buf))
     {
@@ -107,7 +107,7 @@ uint32_t sw_packet_encode(const sw_packet_frame_t *pf,
         return 0;
     }
 
-    if (!sw_packet_address_is_valid(pf))
+    if (!sw_ptp_address_is_valid(pf))
     {
         return 0;
     }
@@ -132,7 +132,7 @@ uint32_t sw_packet_encode(const sw_packet_frame_t *pf,
         return 0;
     }
 
-    sw_packet_write_header(pf, buf);
+    sw_ptp_write_header(pf, buf);
 
     g_sw_stats.packets_sent++;
     g_sw_stats.bytes_sent += total;
@@ -146,7 +146,7 @@ uint32_t sw_packet_encode(const sw_packet_frame_t *pf,
  * @param[out] status Receive-status output; may be NULL.
  * @param[in]  code   Status code to report.
  */
-static void sw_packet_report(sw_ptp_status_t *status, sw_ptp_status_t code)
+static void sw_ptp_report(sw_ptp_status_t *status, sw_ptp_status_t code)
 {
     if (status)
     {
@@ -161,10 +161,10 @@ static void sw_packet_report(sw_ptp_status_t *status, sw_ptp_status_t code)
  * @param[in]  code   Status code to report.
  * @return Always ::SW_ERR.
  */
-static sw_result_t sw_packet_discard(sw_ptp_status_t *status, sw_ptp_status_t code)
+static sw_result_t sw_ptp_discard(sw_ptp_status_t *status, sw_ptp_status_t code)
 {
     g_sw_stats.packets_discarded++;
-    sw_packet_report(status, code);
+    sw_ptp_report(status, code);
 
     return SW_ERR;
 }
@@ -182,7 +182,7 @@ static sw_result_t sw_packet_discard(sw_ptp_status_t *status, sw_ptp_status_t co
  * @return ::SW_PTP_STATUS_OK if the packet may be extracted, otherwise the
  *         status to report for the discard.
  */
-static sw_ptp_status_t sw_packet_check(const uint8_t *buf, uint32_t buf_len, sw_end_marker_t end)
+static sw_ptp_status_t sw_ptp_check(const uint8_t *buf, uint32_t buf_len, sw_end_marker_t end)
 {
     /* clause 5.5.4.4: a packet terminated by EEP shall be discarded. */
     if (end == SW_END_EEP)
@@ -211,31 +211,31 @@ static sw_ptp_status_t sw_packet_check(const uint8_t *buf, uint32_t buf_len, sw_
     return SW_PTP_STATUS_OK;
 }
 
-sw_result_t sw_packet_decode(sw_packet_frame_t *pf,
-                             void *payload,
-                             const uint8_t *buf,
-                             uint32_t buf_len,
-                             sw_end_marker_t end,
-                             sw_ptp_status_t *status)
+sw_result_t sw_ptp_decode(sw_ptp_frame_t *pf,
+                          void *payload,
+                          const uint8_t *buf,
+                          uint32_t buf_len,
+                          sw_end_marker_t end,
+                          sw_ptp_status_t *status)
 {
     if ((!pf) || (!payload) || (!buf))
     {
-        sw_packet_report(status, SW_PTP_STATUS_INVALID);
+        sw_ptp_report(status, SW_PTP_STATUS_INVALID);
 
         return SW_INVALID_PARAM;
     }
 
-    const sw_ptp_status_t code = sw_packet_check(buf, buf_len, end);
+    const sw_ptp_status_t code = sw_ptp_check(buf, buf_len, end);
     if (code != SW_PTP_STATUS_OK)
     {
-        return sw_packet_discard(status, code);
+        return sw_ptp_discard(status, code);
     }
 
     /* clause 5.5.4.2: extract the carried packet. A hook that cannot represent it
      * fails and leaves the payload object unchanged; nothing is delivered then. */
     if (!sw_payload_parse(payload, &buf[SW_PTP_HEADER_LEN], buf_len - SW_PTP_HEADER_LEN))
     {
-        return sw_packet_discard(status, SW_PTP_STATUS_INVALID);
+        return sw_ptp_discard(status, SW_PTP_STATUS_INVALID);
     }
 
     pf->path = NULL;
@@ -245,26 +245,26 @@ sw_result_t sw_packet_decode(sw_packet_frame_t *pf,
 
     g_sw_stats.packets_received++;
     g_sw_stats.bytes_received += buf_len;
-    sw_packet_report(status, SW_PTP_STATUS_OK);
+    sw_ptp_report(status, SW_PTP_STATUS_OK);
 
     return SW_OK;
 }
 
-uint32_t sw_packet_create(uint8_t logical_addr,
-                          uint8_t user_app,
-                          const void *payload,
-                          uint8_t *buf,
-                          uint32_t buf_len)
+uint32_t sw_ptp_create(uint8_t logical_addr,
+                       uint8_t user_app,
+                       const void *payload,
+                       uint8_t *buf,
+                       uint32_t buf_len)
 {
-    const sw_packet_frame_t pf = {.path = NULL,
-                                  .path_len = 0,
-                                  .logical_addr = logical_addr,
-                                  .user_app = user_app};
+    const sw_ptp_frame_t pf = {.path = NULL,
+                               .path_len = 0,
+                               .logical_addr = logical_addr,
+                               .user_app = user_app};
 
-    return sw_packet_encode(&pf, payload, buf, buf_len);
+    return sw_ptp_encode(&pf, payload, buf, buf_len);
 }
 
-void sw_packet_get_statistics(sw_packet_statistics_t *stats)
+void sw_ptp_get_statistics(sw_ptp_statistics_t *stats)
 {
     if (!stats)
     {
@@ -274,7 +274,7 @@ void sw_packet_get_statistics(sw_packet_statistics_t *stats)
     *stats = g_sw_stats;
 }
 
-void sw_packet_reset_statistics(void)
+void sw_ptp_reset_statistics(void)
 {
     memset(&g_sw_stats, 0, sizeof(g_sw_stats));
 }

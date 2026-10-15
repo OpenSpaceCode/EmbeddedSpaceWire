@@ -17,8 +17,8 @@
  * OpenSpaceCode — https://github.com/OpenSpaceCode
  */
 #include "cunit.h"
-#include "spacewire_packet.h"
 #include "spacewire_payload.h"
+#include "spacewire_ptp.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -54,10 +54,10 @@ static int g_fail_parse = 0;
 
 static const uint8_t toy_body[TOY_BODY_LEN] = {1, 2, 3, 4, 5, 6, 7, 8};
 static const toy_packet_t toy_packet = {.body = toy_body, .body_len = TOY_BODY_LEN};
-static const sw_packet_frame_t toy_frame = {.path = NULL,
-                                            .path_len = 0,
-                                            .logical_addr = 0x20,
-                                            .user_app = 0x05};
+static const sw_ptp_frame_t toy_frame = {.path = NULL,
+                                         .path_len = 0,
+                                         .logical_addr = 0x20,
+                                         .user_app = 0x05};
 
 uint32_t sw_payload_size(const void *payload)
 {
@@ -109,8 +109,8 @@ int sw_payload_parse(void *payload, const uint8_t *buf, uint32_t buf_len)
  */
 static int expect_invalid(const uint8_t *buf, uint32_t buf_len)
 {
-    sw_packet_frame_t pf;
-    sw_packet_frame_t pf_before;
+    sw_ptp_frame_t pf;
+    sw_ptp_frame_t pf_before;
     toy_packet_t pkt;
     toy_packet_t pkt_before;
     memset(&pf, FILL, sizeof(pf));
@@ -119,7 +119,7 @@ static int expect_invalid(const uint8_t *buf, uint32_t buf_len)
     memcpy(&pkt_before, &pkt, sizeof(pkt));
 
     sw_ptp_status_t status = SW_PTP_STATUS_OK;
-    ASSERT_EQ_INT(SW_ERR, sw_packet_decode(&pf, &pkt, buf, buf_len, SW_END_EOP, &status));
+    ASSERT_EQ_INT(SW_ERR, sw_ptp_decode(&pf, &pkt, buf, buf_len, SW_END_EOP, &status));
     ASSERT_EQ_INT(SW_PTP_STATUS_INVALID, status);
     ASSERT_EQ_MEM(&pf, &pf_before, sizeof(pf));
     ASSERT_EQ_MEM(&pkt, &pkt_before, sizeof(pkt));
@@ -138,7 +138,7 @@ static uint8_t *alloc_toy_wire(uint32_t wire_len)
     uint8_t encoded[TOY_WIRE_LEN];
     uint8_t *wire = (uint8_t *)calloc(wire_len, 1);
 
-    if ((wire) && (sw_packet_encode(&toy_frame, &toy_packet, encoded, sizeof(encoded)) != 0u))
+    if ((wire) && (sw_ptp_encode(&toy_frame, &toy_packet, encoded, sizeof(encoded)) != 0u))
     {
         memcpy(wire, encoded, (wire_len < TOY_WIRE_LEN) ? wire_len : TOY_WIRE_LEN);
     }
@@ -155,9 +155,9 @@ static int test_override_replaces_defaults(void)
         return 1;
     }
 
-    sw_packet_frame_t pf;
+    sw_ptp_frame_t pf;
     toy_packet_t pkt = {.body = NULL, .body_len = 0};
-    const sw_result_t result = sw_packet_decode(&pf, &pkt, wire, TOY_WIRE_LEN, SW_END_EOP, NULL);
+    const sw_result_t result = sw_ptp_decode(&pf, &pkt, wire, TOY_WIRE_LEN, SW_END_EOP, NULL);
     const uint8_t prefix = wire[SW_PTP_HEADER_LEN];
     const int zero_copy = (pkt.body == &wire[SW_PTP_HEADER_LEN + TOY_PREFIX_LEN]);
     const int same_body =
@@ -182,10 +182,9 @@ static int test_override_trailing_octet_reaches_hook(void)
         return 1;
     }
 
-    sw_packet_frame_t pf;
+    sw_ptp_frame_t pf;
     toy_packet_t pkt = {.body = NULL, .body_len = 0};
-    const sw_result_t result =
-        sw_packet_decode(&pf, &pkt, wire, TOY_WIRE_LEN + 1u, SW_END_EOP, NULL);
+    const sw_result_t result = sw_ptp_decode(&pf, &pkt, wire, TOY_WIRE_LEN + 1u, SW_END_EOP, NULL);
     free(wire);
 
     ASSERT_EQ_INT(SW_OK, result);
@@ -217,12 +216,12 @@ static int test_override_parse_failure_discards(void)
         return 1;
     }
 
-    sw_packet_statistics_t stats;
-    sw_packet_reset_statistics();
+    sw_ptp_statistics_t stats;
+    sw_ptp_reset_statistics();
     g_fail_parse = 1;
     const int failed = expect_invalid(wire, TOY_WIRE_LEN);
     g_fail_parse = 0;
-    sw_packet_get_statistics(&stats);
+    sw_ptp_get_statistics(&stats);
     free(wire);
 
     ASSERT_EQ_INT(0, failed);
@@ -236,15 +235,15 @@ static int test_override_serialize_failure_leaves_buffer_unchanged(void)
 {
     uint8_t untouched[TOY_WIRE_LEN];
     uint8_t wire[TOY_WIRE_LEN];
-    sw_packet_statistics_t stats;
+    sw_ptp_statistics_t stats;
     memset(untouched, FILL, sizeof(untouched));
     memset(wire, FILL, sizeof(wire));
 
-    sw_packet_reset_statistics();
+    sw_ptp_reset_statistics();
     g_fail_serialize = 1;
-    const uint32_t n = sw_packet_encode(&toy_frame, &toy_packet, wire, sizeof(wire));
+    const uint32_t n = sw_ptp_encode(&toy_frame, &toy_packet, wire, sizeof(wire));
     g_fail_serialize = 0;
-    sw_packet_get_statistics(&stats);
+    sw_ptp_get_statistics(&stats);
 
     ASSERT_EQ_INT(0, n);
     ASSERT_EQ_MEM(wire, untouched, sizeof(wire));

@@ -14,8 +14,8 @@
  */
 
 #include "spacewire.h"
-#include "spacewire_packet.h"
 #include "spacewire_payload.h"
+#include "spacewire_ptp.h"
 
 #include <inttypes.h>
 #include <stdio.h>
@@ -86,25 +86,25 @@ static int example_packet_transfer(void)
     static const uint8_t space_packet[] =
         {0x00, 0x42, 0xC0, 0x01, 0x00, 0x03, 0xDE, 0xAD, 0xBE, 0xEF};
     const sw_payload_raw_t payload = {.data = space_packet, .len = sizeof(space_packet)};
-    const sw_packet_frame_t frame = {.path = NULL,
-                                     .path_len = 0,
-                                     .logical_addr = SW_PTP_LOGICAL_ADDR_DEFAULT,
-                                     .user_app = 0x00};
+    const sw_ptp_frame_t frame = {.path = NULL,
+                                  .path_len = 0,
+                                  .logical_addr = SW_PTP_LOGICAL_ADDR_DEFAULT,
+                                  .user_app = 0x00};
     uint8_t buf[32];
 
     printf("[2] CCSDS Packet Transfer Protocol\n");
 
-    const uint32_t len = sw_packet_encode(&frame, &payload, buf, sizeof(buf));
+    const uint32_t len = sw_ptp_encode(&frame, &payload, buf, sizeof(buf));
     if (len == 0u)
     {
         return 1;
     }
     example_print_hex("encoded:", buf, len);
 
-    sw_packet_frame_t received;
+    sw_ptp_frame_t received;
     sw_payload_raw_t carried;
     sw_ptp_status_t status;
-    if (sw_packet_decode(&received, &carried, buf, len, SW_END_EOP, &status) != SW_OK)
+    if (sw_ptp_decode(&received, &carried, buf, len, SW_END_EOP, &status) != SW_OK)
     {
         return 1;
     }
@@ -186,9 +186,9 @@ static int example_routing(void)
  */
 static void example_statistics(void)
 {
-    sw_packet_statistics_t stats;
+    sw_ptp_statistics_t stats;
 
-    sw_packet_get_statistics(&stats);
+    sw_ptp_get_statistics(&stats);
     printf("[4] Statistics\n");
     printf("    packets sent/received/discarded: %" PRIu32 "/%" PRIu32 "/%" PRIu32 "\n",
            stats.packets_sent,

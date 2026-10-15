@@ -1,5 +1,5 @@
 /**
- * @file    spacewire_packet.h
+ * @file    spacewire_ptp.h
  * @brief   CCSDS Packet Transfer Protocol over SpaceWire (ECSS-E-ST-50-53C)
  *
  * Encapsulates a packet into a SpaceWire packet on the send path and extracts
@@ -17,8 +17,8 @@
  * OpenSpaceCode — https://github.com/OpenSpaceCode
  */
 
-#ifndef SPACEWIRE_PACKET_H
-#define SPACEWIRE_PACKET_H
+#ifndef SPACEWIRE_PTP_H
+#define SPACEWIRE_PTP_H
 
 #include "spacewire.h"
 
@@ -98,7 +98,7 @@ typedef enum
 /**
  * @brief Addressing and encapsulation fields of a CCSDS Packet Transfer Protocol packet.
  *
- * The wire layout produced by sw_packet_encode() follows ECSS-E-ST-50-53C
+ * The wire layout produced by sw_ptp_encode() follows ECSS-E-ST-50-53C
  * Figure 5-1:
  *
  *     [ Target SpW Address: 0..N octets, each 0-254 ]       (optional)
@@ -107,7 +107,7 @@ typedef enum
  *
  * followed by an EOP that the link layer appends (not stored in the buffer).
  * The carried packet is not part of this structure; it is passed to
- * sw_packet_encode() and sw_packet_decode() as a separate payload object.
+ * sw_ptp_encode() and sw_ptp_decode() as a separate payload object.
  *
  * @note @p path points into caller-owned memory; the library neither copies nor
  *       frees it.
@@ -122,7 +122,7 @@ typedef struct
     uint8_t logical_addr; /**< Target Logical Address (clause 5.3.2); 32..254 per ECSS-E-ST-50-12C
                              clause 5.6.8.4. */
     uint8_t user_app; /**< User Application field; may carry a virtual channel (clause 5.3.5). */
-} sw_packet_frame_t;
+} sw_ptp_frame_t;
 
 /**
  * @brief Virtual channel number.
@@ -131,22 +131,22 @@ typedef struct
  * carry a virtual channel number, so a virtual channel is represented as that
  * 8-bit value rather than as separate router state.
  */
-typedef uint8_t sw_virtual_channel_t;
+typedef uint8_t sw_ptp_virtual_channel_t;
 
 /**
  * @brief Cumulative CCSDS PTP traffic counters.
  *
  * @note The statistics are a single process-global instance updated by
- *       sw_packet_encode() and sw_packet_decode(); access is not thread-safe.
+ *       sw_ptp_encode() and sw_ptp_decode(); access is not thread-safe.
  */
 typedef struct
 {
     uint32_t packets_sent;      /**< Successfully encoded packets. */
     uint32_t packets_received;  /**< Successfully decoded packets. */
     uint32_t packets_discarded; /**< Discarded (EEP / Reserved!=0 / bad ID / malformed). */
-    uint32_t bytes_sent;        /**< Total octets emitted by sw_packet_encode(). */
+    uint32_t bytes_sent;        /**< Total octets emitted by sw_ptp_encode(). */
     uint32_t bytes_received;    /**< Total octets consumed by successful decode. */
-} sw_packet_statistics_t;
+} sw_ptp_statistics_t;
 
 /* -------------------------------------------------------------------------
  * Function Declarations
@@ -158,7 +158,7 @@ typedef struct
  * @param[in,out] pf Packet frame. No-op if NULL.
  * @param[in]  vc Virtual channel number.
  */
-static inline void sw_packet_set_virtual_channel(sw_packet_frame_t *pf, sw_virtual_channel_t vc)
+static inline void sw_ptp_set_virtual_channel(sw_ptp_frame_t *pf, sw_ptp_virtual_channel_t vc)
 {
     if (pf)
     {
@@ -172,9 +172,9 @@ static inline void sw_packet_set_virtual_channel(sw_packet_frame_t *pf, sw_virtu
  * @param[in] pf Packet frame.
  * @return Virtual channel number, or 0 if @p pf is NULL.
  */
-static inline sw_virtual_channel_t sw_packet_get_virtual_channel(const sw_packet_frame_t *pf)
+static inline sw_ptp_virtual_channel_t sw_ptp_get_virtual_channel(const sw_ptp_frame_t *pf)
 {
-    return pf ? pf->user_app : (sw_virtual_channel_t)0;
+    return pf ? pf->user_app : (sw_ptp_virtual_channel_t)0;
 }
 
 /**
@@ -197,10 +197,10 @@ static inline sw_virtual_channel_t sw_packet_get_virtual_channel(const sw_packet
  *         ::SW_PTP_CCSDS_MIN_LEN to ::SW_PTP_CCSDS_MAX_LEN octets, buffer too small,
  *         or a failing payload hook).
  */
-uint32_t sw_packet_encode(const sw_packet_frame_t *pf,
-                          const void *payload,
-                          uint8_t *buf,
-                          uint32_t buf_len);
+uint32_t sw_ptp_encode(const sw_ptp_frame_t *pf,
+                       const void *payload,
+                       uint8_t *buf,
+                       uint32_t buf_len);
 
 /**
  * @brief Decode a received CCSDS PTP packet.
@@ -236,17 +236,17 @@ uint32_t sw_packet_encode(const sw_packet_frame_t *pf,
  * @return ::SW_OK if a valid packet is delivered, ::SW_ERR if it is discarded,
  *         or ::SW_INVALID_PARAM if @p pf, @p payload or @p buf is NULL.
  */
-sw_result_t sw_packet_decode(sw_packet_frame_t *pf,
-                             void *payload,
-                             const uint8_t *buf,
-                             uint32_t buf_len,
-                             sw_end_marker_t end,
-                             sw_ptp_status_t *status);
+sw_result_t sw_ptp_decode(sw_ptp_frame_t *pf,
+                          void *payload,
+                          const uint8_t *buf,
+                          uint32_t buf_len,
+                          sw_end_marker_t end,
+                          sw_ptp_status_t *status);
 
 /**
  * @brief Build a complete CCSDS PTP packet using logical addressing only.
  *
- * Convenience wrapper around sw_packet_encode() for a frame without a path
+ * Convenience wrapper around sw_ptp_encode() for a frame without a path
  * address. On failure, @p buf is left unchanged.
  *
  * @param[in]  logical_addr Target Logical Address.
@@ -254,28 +254,28 @@ sw_result_t sw_packet_decode(sw_packet_frame_t *pf,
  * @param[in]  payload      Payload object handed to the payload adapter hooks.
  * @param[out] buf          Output buffer.
  * @param[in]  buf_len      Buffer capacity in octets.
- * @return Octets written, or 0 on error (see sw_packet_encode()).
+ * @return Octets written, or 0 on error (see sw_ptp_encode()).
  */
-uint32_t sw_packet_create(uint8_t logical_addr,
-                          uint8_t user_app,
-                          const void *payload,
-                          uint8_t *buf,
-                          uint32_t buf_len);
+uint32_t sw_ptp_create(uint8_t logical_addr,
+                       uint8_t user_app,
+                       const void *payload,
+                       uint8_t *buf,
+                       uint32_t buf_len);
 
 /**
  * @brief Copy the current statistics.
  *
  * @param[out] stats Destination. No-op if NULL.
  */
-void sw_packet_get_statistics(sw_packet_statistics_t *stats);
+void sw_ptp_get_statistics(sw_ptp_statistics_t *stats);
 
 /**
  * @brief Reset all statistics counters to zero.
  */
-void sw_packet_reset_statistics(void);
+void sw_ptp_reset_statistics(void);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* SPACEWIRE_PACKET_H */
+#endif /* SPACEWIRE_PTP_H */

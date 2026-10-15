@@ -5,14 +5,14 @@
  * Minimal, embedded-optimized implementation of the SpaceWire packet
  * structure and routing as per ECSS-E-ST-50-12C Rev.1 (SpaceWire — links,
  * nodes, routers and networks), clauses 5.6.2 and 5.6.8. The CCSDS packet
- * transfer protocol (ECSS-E-ST-50-53C) is declared in spacewire_packet.h.
+ * transfer protocol (ECSS-E-ST-50-53C) is declared in spacewire_ptp.h.
  *
  * Scope: this library implements the packet and network layers only. The
  * character/signal and data-link levels — character encoding and parity,
  * data-strobe (DS) signalling, link initialisation and flow control, and the
  * generation/detection of the EOP/EEP end-of-packet markers — are provided by
  * the SpaceWire hardware CODEC. EOP/EEP are therefore exchanged with this
- * library as out-of-band metadata (see ::sw_end_marker_t in spacewire_packet.h),
+ * library as out-of-band metadata (see ::sw_end_marker_t in spacewire_ptp.h),
  * not as bytes within packet buffers.
  *
  * Copyright 2026 OpenSpaceCode contributors

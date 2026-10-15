@@ -38,7 +38,7 @@ test_result_t test_spacewire_router_run_all(void);
  *
  * @return Passed and total test counts of the suite.
  */
-test_result_t test_spacewire_packet_run_all(void);
+test_result_t test_spacewire_ptp_run_all(void);
 
 /**
  * @brief Run every test of the default payload hooks.

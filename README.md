@@ -43,12 +43,12 @@ library as out-of-band metadata, not as bytes within packet buffers.
 EmbeddedSpaceWire/
 ├── include/
 │   ├── spacewire.h              # SpaceWire packet + network (routing) layer
-│   ├── spacewire_packet.h       # CCSDS packet transfer protocol (ECSS-E-ST-50-53C)
+│   ├── spacewire_ptp.h          # CCSDS packet transfer protocol (ECSS-E-ST-50-53C)
 │   └── spacewire_payload.h      # Payload adapter hooks
 ├── src/
 │   ├── spacewire_spw_packet.c   # SpaceWire packet builder
 │   ├── spacewire_router.c       # Routing switch
-│   ├── spacewire_packet.c       # CCSDS packet transfer protocol
+│   ├── spacewire_ptp.c          # CCSDS packet transfer protocol
 │   └── weak/
 │       └── spacewire_payload.c  # Default (raw-octet) payload hooks, replaceable
 ├── docs/
@@ -60,7 +60,7 @@ EmbeddedSpaceWire/
 │   ├── test_runners.h           # Suite runner declarations
 │   ├── test_spw_packet.c        # Packet-builder tests
 │   ├── test_router.c            # Routing tests
-│   ├── test_packet.c            # CCSDS PTP tests (+ golden wire vector)
+│   ├── test_ptp.c               # CCSDS PTP tests (+ golden wire vector)
 │   ├── test_payload.c           # Default payload hook tests
 │   ├── test_payload_override.c  # Overridden payload hooks (own binary)
 │   └── unit_tests.c             # Test runner
@@ -213,7 +213,7 @@ overrides for CCSDS Space Packets using EmbeddedSpacePacket.
 Figures for x86-64:
 
 - **Library code**: ~2.2 KB (`.text`); no dynamic allocation, all buffers caller-owned
-- **`sw_packet_frame_t`**: 16 bytes (CCSDS PTP addressing fields)
+- **`sw_ptp_frame_t`**: 16 bytes (CCSDS PTP addressing fields)
 - **`sw_router_t`**: 784 bytes — a 256-entry routing table (3 B/entry) plus
   counters
 
@@ -222,8 +222,8 @@ Figures for x86-64:
 Packet and routing operations work entirely on caller-owned state passed
 by pointer and take no internal locks, so independent objects can be used from
 independent tasks. The one shared item is the library's statistics block:
-`sw_packet_encode` and `sw_packet_decode` update a process-global counter (read
-via `sw_packet_get_statistics`, cleared via `sw_packet_reset_statistics`), which is **not**
+`sw_ptp_encode` and `sw_ptp_decode` update a process-global counter (read
+via `sw_ptp_get_statistics`, cleared via `sw_ptp_reset_statistics`), which is **not**
 thread-safe. In a multi-task system, serialise the encode/decode/statistics
 calls or confine them to a single task.
 

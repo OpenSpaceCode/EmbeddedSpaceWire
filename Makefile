@@ -19,7 +19,7 @@ BIN_DIR := $(BUILD_DIR)/bin
 # Source files
 CORE_SRCS := src/spacewire_spw_packet.c \
              src/spacewire_router.c \
-             src/spacewire_packet.c
+             src/spacewire_ptp.c
 # Weak default payload hooks, kept apart because an application may replace them.
 WEAK_SRCS := src/weak/spacewire_payload.c
 
@@ -27,7 +27,7 @@ EXAMPLE_SRCS := examples/main.c
 TEST_SRCS := tests/unit_tests.c \
              tests/test_spw_packet.c \
              tests/test_router.c \
-             tests/test_packet.c \
+             tests/test_ptp.c \
              tests/test_payload.c
 # Linked as an object file, so its strong sw_payload_*() definitions replace the
 # library's weak defaults (an override inside a static archive would be ignored).
