@@ -167,7 +167,7 @@ static inline void sw_packet_set_virtual_channel(sw_packet_frame_t *pf, sw_virtu
  * @param[in] pf Packet frame.
  * @return Virtual channel number, or 0 if @p pf is NULL.
  */
-static inline sw_virtual_channel_t sw_packet_virtual_channel(const sw_packet_frame_t *pf)
+static inline sw_virtual_channel_t sw_packet_get_virtual_channel(const sw_packet_frame_t *pf)
 {
     return pf ? pf->user_app : (sw_virtual_channel_t)0;
 }

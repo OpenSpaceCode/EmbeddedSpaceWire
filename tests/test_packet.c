@@ -573,7 +573,7 @@ static int test_packet_virtual_channel(void)
     uint8_t wire[SAMPLE_WIRE_LEN];
 
     sw_packet_set_virtual_channel(&pf, 0x07);
-    ASSERT_EQ_INT(0x07, sw_packet_virtual_channel(&pf));
+    ASSERT_EQ_INT(0x07, sw_packet_get_virtual_channel(&pf));
     ASSERT_EQ_INT(0x07, pf.user_app);
 
     ASSERT_EQ_INT(SAMPLE_WIRE_LEN, sw_packet_encode(&pf, &sample_payload, wire, sizeof(wire)));
@@ -582,10 +582,10 @@ static int test_packet_virtual_channel(void)
     sw_packet_frame_t out;
     sw_payload_raw_t payload;
     ASSERT_EQ_INT(SW_OK, sw_packet_decode(&out, &payload, wire, sizeof(wire), SW_END_EOP, NULL));
-    ASSERT_EQ_INT(0x07, sw_packet_virtual_channel(&out));
+    ASSERT_EQ_INT(0x07, sw_packet_get_virtual_channel(&out));
 
     sw_packet_set_virtual_channel(NULL, 0x09); /* no-op, must not crash */
-    ASSERT_EQ_INT(0, sw_packet_virtual_channel(NULL));
+    ASSERT_EQ_INT(0, sw_packet_get_virtual_channel(NULL));
     return 0;
 }
 
