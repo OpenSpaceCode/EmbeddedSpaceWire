@@ -1,6 +1,6 @@
 CC ?= cc
-# Stronger warnings for code quality
-CFLAGS ?= -O2 -Iinclude -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
+# Stronger warnings for code quality; any warning fails the build
+CFLAGS ?= -O2 -Iinclude -Werror -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
 		  -Wcast-align -Wcast-qual -Wpointer-arith -Wformat=2 \
 		  -Wmissing-prototypes -Wstrict-prototypes -Wredundant-decls -Wundef \
 		  -std=c99
