@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  unit-tests:
+    name: Unit tests and example (${{ matrix.cc }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        cc: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build libraries, run both test binaries and the example (-Werror)
+        run: make CC=${{ matrix.cc }}
+
+  coverage:
+    name: Coverage (100% line and branch)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install gcovr
+        run: sudo apt-get update && sudo apt-get install -y gcovr
+      - name: Build instrumented tests, report, and enforce 100% line and branch
+        run: make coverage-html
+      - name: Upload HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html
+          path: build/coverage/
+          if-no-files-found: ignore
+
+  sanitizers:
+    name: ASan + UBSan (${{ matrix.cc }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        cc: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and run tests and example under ASan and UBSan
+        run: make sanitize CC=${{ matrix.cc }}
+
+  format:
+    name: clang-format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install clang-format
+        run: sudo apt-get update && sudo apt-get install -y clang-format
+      - name: Check formatting against .clang-format
+        run: git ls-files '*.c' '*.h' | xargs clang-format --dry-run --Werror
