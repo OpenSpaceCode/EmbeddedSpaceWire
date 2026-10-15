@@ -15,7 +15,7 @@ Minimal, embedded-optimized implementation of the **SpaceWire** packet and netwo
 ### Core Protocol Implementation
 
 - **Network layer**: SpaceWire packets and routing — path (0–31) and logical
-  (32–254) addressing with header deletion (ECSS-E-ST-50-12C §5.6)
+  (32–254) addressing with header deletion (ECSS-E-ST-50-12C §5.6.8)
 - **CCSDS Packet Transfer Protocol**: encapsulation/extraction of the carried
   packet with EOP/EEP receive status (ECSS-E-ST-50-53C)
 - **Payload adapter**: the carried packet is reached through four overridable
@@ -173,7 +173,7 @@ scope or not yet implemented:
 - Character/signal and data-link levels — provided by the SpaceWire hardware CODEC
 - Building and validating the carried CCSDS Space Packet — provided by the
   application through the payload adapter
-- Time-codes, broadcast codes and distributed interrupts (ECSS-E-ST-50-12C §5.6)
+- Time-codes, broadcast codes and distributed interrupts (ECSS-E-ST-50-12C §5.6.3–5.6.5)
 - Group adaptive routing (one output port per logical address)
 - Guaranteed delivery — per ECSS-E-ST-50-53C the service is unconfirmed and
   incomplete (no acknowledgement, retransmission or QoS)

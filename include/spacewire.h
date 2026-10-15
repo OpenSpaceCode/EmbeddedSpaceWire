@@ -36,7 +36,7 @@ extern "C"
  * Constants
  * ---------------------------------------------------------------------- */
 
-/** @brief Configuration port number; reachable by path addressing only (clause 5.6.8.2). */
+/** @brief Configuration port; reached by path addressing only (clauses 5.6.8.2 a, 5.6.8.3 f). */
 #define SW_PORT_CONFIG 0u
 
 /** @brief Most ports a router can have, configuration port 0 included (clause 5.6.8.2). */
