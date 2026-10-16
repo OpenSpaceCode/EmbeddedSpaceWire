@@ -39,11 +39,15 @@ size_t sw_spw_packet_build(const uint8_t *dest,
         return 0;
     }
 
-    const size_t total = dest_len + cargo_len;
-    if ((total == 0) || (total > buf_len))
+    /* Compared part by part: dest_len + cargo_len can wrap and pass a size check. */
+    if ((dest_len > buf_len) || (cargo_len > (buf_len - dest_len)))
     {
         return 0;
     }
+
+    /* An empty packet needs no check of its own: nothing is copied and the result,
+     * 0, is the error value. */
+    const size_t total = dest_len + cargo_len;
 
     if (dest_len > 0)
     {

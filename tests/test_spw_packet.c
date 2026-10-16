@@ -134,6 +134,45 @@ static int test_spw_packet_build_one_short(void)
     return 0;
 }
 
+/**
+ * @brief Expect a rejected build and an untouched buffer.
+ *
+ * Only the lengths matter: the pointers are valid but small, so the call must
+ * be rejected before anything is copied.
+ */
+static int expect_length_rejected(size_t dest_len, size_t cargo_len, size_t buf_len)
+{
+    const uint8_t dest[8] = {0x40};
+    const uint8_t cargo[8] = {0x11};
+    const uint8_t untouched[8] = {FILL, FILL, FILL, FILL, FILL, FILL, FILL, FILL};
+    uint8_t buf[8];
+    memset(buf, FILL, sizeof(buf));
+
+    ASSERT_EQ_UINT(0, sw_spw_packet_build(dest, dest_len, cargo, cargo_len, buf, buf_len));
+    ASSERT_EQ_MEM(buf, untouched, sizeof(untouched));
+    return 0;
+}
+
+/* Lengths whose sum wraps around SIZE_MAX are rejected before any copy. */
+static int test_spw_packet_build_length_overflow_rejected(void)
+{
+    ASSERT_EQ_INT(0, expect_length_rejected(SIZE_MAX, 5, 8)); /* sum wraps to 4 */
+    ASSERT_EQ_INT(0, expect_length_rejected(5, SIZE_MAX, 8)); /* sum wraps to 4 */
+    ASSERT_EQ_INT(0, expect_length_rejected(SIZE_MAX, SIZE_MAX, 8));
+    ASSERT_EQ_INT(0, expect_length_rejected(SIZE_MAX, 1, 8)); /* sum wraps to 0 */
+    return 0;
+}
+
+/* A destination address alone longer than the buffer: 4 octets fit, 5 do not. */
+static int test_spw_packet_build_dest_longer_than_buffer(void)
+{
+    const uint8_t dest[5] = {1, 2, 3, 4, 5};
+
+    ASSERT_EQ_INT(0, build_exact(dest, 4, NULL, 0, dest, 4));
+    ASSERT_EQ_INT(0, expect_length_rejected(5, 0, 4));
+    return 0;
+}
+
 static int test_spw_packet_build_errors(void)
 {
     const uint8_t dest[1] = {0x40};
@@ -177,6 +216,8 @@ test_result_t test_spacewire_spw_packet_run_all(void)
     RUN_TEST(test_spw_packet_build_dest_only);
     RUN_TEST(test_spw_packet_build_single_octet);
     RUN_TEST(test_spw_packet_build_one_short);
+    RUN_TEST(test_spw_packet_build_length_overflow_rejected);
+    RUN_TEST(test_spw_packet_build_dest_longer_than_buffer);
     RUN_TEST(test_spw_packet_build_errors);
     RUN_TEST(test_spw_packet_build_failure_leaves_buffer_unchanged);
     return (test_result_t){cunit_total_tests - cunit_overall_failures, cunit_total_tests};
