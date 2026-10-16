@@ -64,28 +64,14 @@ extern "C"
  * ---------------------------------------------------------------------- */
 
 /**
- * @brief End-of-packet marker supplied by the SpaceWire link layer
- *        (ECSS-E-ST-50-12C clause 5.4.3.2).
- *
- * In a SpaceWire network the terminator is a control character, not a data
- * octet, so it is carried here as out-of-band metadata rather than appended to
- * the encoded buffer.
- */
-typedef enum
-{
-    SW_END_EOP = 0, /**< Normal End Of Packet. */
-    SW_END_EEP = 1  /**< Error End of Packet. */
-} sw_end_marker_t;
-
-/**
  * @brief Receive status reported to the target user application (clauses 5.1.3, 5.2.3.2).
  *
  * The first three values are the status codes defined by the standard.
  * ::SW_PTP_STATUS_INVALID is not one of them (clauses 5.1.3 b, 5.2.3.2 c allow only
  * 0x00..0x02); it is an implementation sentinel for input that is not delivered for
- * other reasons: NULL arguments, fewer octets than the encapsulation header, a
- * Protocol Identifier other than 0x02 (not a CCSDS PTP packet, clause 5.5.4.1), or
- * sw_payload_parse() failing.
+ * other reasons: NULL arguments, an end marker that is neither EOP nor EEP, fewer
+ * octets than the encapsulation header, a Protocol Identifier other than 0x02 (not a
+ * CCSDS PTP packet, clause 5.5.4.1), or sw_payload_parse() failing.
  */
 typedef enum
 {
@@ -226,11 +212,14 @@ uint32_t sw_ptp_encode(const sw_ptp_frame_t *pf,
  *                     default hooks, a ::sw_payload_raw_t that points into @p buf.
  * @param[in]  buf     Received buffer to parse.
  * @param[in]  buf_len Buffer length in octets.
- * @param[in]  end     End-of-packet marker reported by the link layer.
+ * @param[in]  end     End-of-packet marker reported by the link layer. Only
+ *                     ::SW_END_EOP can deliver a packet; any value other than
+ *                     ::SW_END_EOP or ::SW_END_EEP is treated as invalid.
  * @param[out] status  Receive status (clause 5.1.3); may be NULL. Set to
  *                      ::SW_PTP_STATUS_OK on delivery, ::SW_PTP_STATUS_EEP or
  *                      ::SW_PTP_STATUS_RESERVED_NONZERO on a recognised discard,
- *                      or ::SW_PTP_STATUS_INVALID for NULL args, fewer than
+ *                      or ::SW_PTP_STATUS_INVALID for NULL args, an unknown
+ *                      end marker, fewer than
  *                      ::SW_PTP_HEADER_LEN octets, a bad Protocol Identifier, or
  *                      a failing sw_payload_parse().
  * @return ::SW_OK if a valid packet is delivered, ::SW_ERR if it is discarded,

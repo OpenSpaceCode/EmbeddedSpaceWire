@@ -12,8 +12,8 @@
  * data-strobe (DS) signalling, link initialisation and flow control, and the
  * generation/detection of the EOP/EEP end-of-packet markers — are provided by
  * the SpaceWire hardware CODEC. EOP/EEP are therefore exchanged with this
- * library as out-of-band metadata (see ::sw_end_marker_t in spacewire_ptp.h),
- * not as bytes within packet buffers.
+ * library as out-of-band metadata (::sw_end_marker_t), not as bytes within
+ * packet buffers.
  *
  * Copyright 2026 OpenSpaceCode contributors
  * SPDX-License-Identifier: Apache-2.0
@@ -71,6 +71,18 @@ typedef enum
     SW_WRONG_ADDRESS = -0x03, /**< Invalid address */
     SW_WRONG_PORT = -0x04,    /**< Invalid port */
 } sw_result_t;
+
+/**
+ * @brief End-of-packet marker reported by the SpaceWire link layer (clause 5.4.3.2 d, e).
+ *
+ * EOP and EEP are control characters, not data octets, so they are exchanged
+ * with this library as out-of-band metadata rather than stored in packet buffers.
+ */
+typedef enum
+{
+    SW_END_EOP = 0, /**< Normal End Of Packet. */
+    SW_END_EEP = 1  /**< Error End of Packet. */
+} sw_end_marker_t;
 
 /**
  * @brief One routing-table entry mapping a logical address to an output port.

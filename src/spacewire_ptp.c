@@ -190,6 +190,12 @@ static sw_ptp_status_t sw_ptp_check(const uint8_t *buf, uint32_t buf_len, sw_end
         return SW_PTP_STATUS_EEP;
     }
 
+    /* Fail closed: a marker the link layer cannot have meant as EOP delivers nothing. */
+    if (end != SW_END_EOP)
+    {
+        return SW_PTP_STATUS_INVALID;
+    }
+
     /* Without a complete header the packet cannot be identified at all. */
     if (buf_len < SW_PTP_HEADER_LEN)
     {

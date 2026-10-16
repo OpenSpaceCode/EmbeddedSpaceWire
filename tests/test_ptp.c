@@ -445,6 +445,14 @@ static int test_ptp_decode_eep_discarded(void)
     return 0;
 }
 
+/* An end marker that is neither EOP nor EEP is never taken for EOP. */
+static int test_ptp_decode_unknown_end_marker_discarded(void)
+{
+    ASSERT_EQ_INT(0, discard_corrupted(0, 0x20, (sw_end_marker_t)2, SW_PTP_STATUS_INVALID));
+    ASSERT_EQ_INT(0, discard_corrupted(0, 0x20, (sw_end_marker_t)7, SW_PTP_STATUS_INVALID));
+    return 0;
+}
+
 /* clause 5.5.4.3: any non-zero Reserved field discards the packet. */
 static int test_ptp_decode_reserved_nonzero(void)
 {
@@ -623,6 +631,7 @@ test_result_t test_spacewire_ptp_run_all(void)
     RUN_TEST(test_ptp_encode_payload_length_bounds);
     RUN_TEST(test_ptp_encode_buffer_boundary);
     RUN_TEST(test_ptp_decode_eep_discarded);
+    RUN_TEST(test_ptp_decode_unknown_end_marker_discarded);
     RUN_TEST(test_ptp_decode_reserved_nonzero);
     RUN_TEST(test_ptp_decode_bad_protocol_id);
     RUN_TEST(test_ptp_decode_short_lengths_rejected);
