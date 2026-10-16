@@ -20,8 +20,9 @@
  * - Link the overrides as an object file. A linker does not pull an archive
  *   member to replace a symbol that is already defined, so overrides that exist
  *   only inside a static library are silently ignored.
- * - Honour the contract documented on each hook: report errors through the
- *   return value and leave outputs unchanged on failure.
+ * - Honour the contract documented on each hook: return ::SW_OK on success or a
+ *   negative ::sw_status_t on failure, and leave outputs unchanged on failure.
+ *   The library reports any hook failure to its caller as ::SW_PAYLOAD_ERROR.
  *
  * See also: docs/space_packet_integration.md
  *
@@ -33,6 +34,8 @@
 
 #ifndef SPACEWIRE_PAYLOAD_H
 #define SPACEWIRE_PAYLOAD_H
+
+#include "spacewire.h"
 
 #include <stdint.h>
 
@@ -95,16 +98,19 @@ uint32_t sw_payload_size(const void *payload);
 /**
  * @brief Serialise a payload object into a caller-supplied buffer.
  *
- * Default: copies the octets of a ::sw_payload_raw_t. On failure, @p buf is
- * left unchanged.
+ * On ::SW_OK, exactly sw_payload_size() octets for the same object have been
+ * written to @p buf. On failure, @p buf is left unchanged.
+ *
+ * Default: copies the octets of a ::sw_payload_raw_t.
  *
  * @param[in]  payload Payload object; its type is defined by the hook implementation.
  * @param[out] buf     Output buffer.
  * @param[in]  buf_len Buffer capacity in octets.
- * @return Octets written, equal to sw_payload_size() for the same object, or 0
- *         on error (default: NULL args, zero length or buffer too small).
+ * @return ::SW_OK on success, or a negative ::sw_status_t (default:
+ *         ::SW_INVALID_PARAM for NULL args, ::SW_WRONG_LENGTH for zero length,
+ *         ::SW_BUFFER_TOO_SMALL if the octets do not fit).
  */
-uint32_t sw_payload_serialize(const void *payload, uint8_t *buf, uint32_t buf_len);
+sw_status_t sw_payload_serialize(const void *payload, uint8_t *buf, uint32_t buf_len);
 
 /**
  * @brief Parse a serialised payload into a payload object.
@@ -113,7 +119,7 @@ uint32_t sw_payload_serialize(const void *payload, uint8_t *buf, uint32_t buf_le
  * the packet transfer layer does not check the carried packet's length or
  * format (ECSS-E-ST-50-53C clause 4.3). An implementation must not read past
  * @p buf_len, and decides itself what to do with octets its packet does not use.
- * Returning 0 discards the packet.
+ * Returning an error discards the packet.
  *
  * Default: points a ::sw_payload_raw_t at @p buf (zero-copy), zero length
  * included. On failure, @p payload is left unchanged.
@@ -121,9 +127,10 @@ uint32_t sw_payload_serialize(const void *payload, uint8_t *buf, uint32_t buf_le
  * @param[out] payload Payload object; its type is defined by the hook implementation.
  * @param[in]  buf     Serialised payload.
  * @param[in]  buf_len Octets available at @p buf; may be 0.
- * @return 1 on success, 0 on failure (default: NULL args).
+ * @return ::SW_OK on success, or a negative ::sw_status_t (default:
+ *         ::SW_INVALID_PARAM for NULL args).
  */
-int sw_payload_parse(void *payload, const uint8_t *buf, uint32_t buf_len);
+sw_status_t sw_payload_parse(void *payload, const uint8_t *buf, uint32_t buf_len);
 
 #ifdef __cplusplus
 }

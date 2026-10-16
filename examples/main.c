@@ -52,20 +52,26 @@ static int example_spw_packets(void)
 
     printf("[1] SpaceWire packets (no CRC; the link appends EOP)\n");
 
-    size_t len = sw_spw_packet_build(logical_dest,
-                                     sizeof(logical_dest),
-                                     cargo,
-                                     sizeof(cargo),
-                                     buf,
-                                     sizeof(buf));
-    if (len == 0)
+    size_t len = 0;
+    if (sw_spw_packet_build(logical_dest,
+                            sizeof(logical_dest),
+                            cargo,
+                            sizeof(cargo),
+                            buf,
+                            sizeof(buf),
+                            &len) != SW_OK)
     {
         return 1;
     }
     example_print_hex("logical-addressed:", buf, len);
 
-    len = sw_spw_packet_build(path_dest, sizeof(path_dest), cargo, sizeof(cargo), buf, sizeof(buf));
-    if (len == 0)
+    if (sw_spw_packet_build(path_dest,
+                            sizeof(path_dest),
+                            cargo,
+                            sizeof(cargo),
+                            buf,
+                            sizeof(buf),
+                            &len) != SW_OK)
     {
         return 1;
     }
@@ -94,8 +100,8 @@ static int example_packet_transfer(void)
 
     printf("[2] CCSDS Packet Transfer Protocol\n");
 
-    const uint32_t len = sw_ptp_encode(&frame, &payload, buf, sizeof(buf));
-    if (len == 0u)
+    uint32_t len = 0;
+    if (sw_ptp_encode(&frame, &payload, buf, sizeof(buf), &len) != SW_OK)
     {
         return 1;
     }
@@ -123,19 +129,19 @@ static int example_packet_transfer(void)
  * @param[in,out] router   Router to ask.
  * @param[in]     packet   Packet octets; the destination address leads.
  * @param[in]     len      Packet length in octets.
- * @param[in]     expected Decision the example expects.
+ * @param[in]     expected Status the example expects.
  * @return 0 if the router decided as expected, 1 otherwise.
  */
 static int example_route_one(sw_router_t *router,
                              const uint8_t *packet,
                              size_t len,
-                             sw_route_result_t expected)
+                             sw_status_t expected)
 {
     uint8_t port = 0;
     uint8_t delete_leading = 0;
-    const sw_route_result_t result = sw_router_route(router, packet, len, &port, &delete_leading);
+    const sw_status_t result = sw_router_route(router, packet, len, &port, &delete_leading);
 
-    if (result == SW_ROUTE_OK)
+    if (result == SW_OK)
     {
         printf("    leading 0x%02X -> port %u (delete leading: %u)\n",
                packet[0],
@@ -144,7 +150,7 @@ static int example_route_one(sw_router_t *router,
     }
     else
     {
-        printf("    leading 0x%02X -> discarded\n", packet[0]);
+        printf("    leading 0x%02X -> discarded (status %d)\n", packet[0], (int)result);
     }
 
     return (result == expected) ? 0 : 1;
@@ -173,9 +179,9 @@ static int example_routing(void)
         return 1;
     }
 
-    failures += example_route_one(&router, logical_pkt, sizeof(logical_pkt), SW_ROUTE_OK);
-    failures += example_route_one(&router, path_pkt, sizeof(path_pkt), SW_ROUTE_OK);
-    failures += example_route_one(&router, unknown_pkt, sizeof(unknown_pkt), SW_ROUTE_DISCARD);
+    failures += example_route_one(&router, logical_pkt, sizeof(logical_pkt), SW_OK);
+    failures += example_route_one(&router, path_pkt, sizeof(path_pkt), SW_OK);
+    failures += example_route_one(&router, unknown_pkt, sizeof(unknown_pkt), SW_WRONG_ADDRESS);
     printf("    invalid-address errors: %" PRIu32 "\n", router.invalid_address_errors);
 
     return (failures == 0) ? 0 : 1;

@@ -37,7 +37,7 @@ void sw_router_init(sw_router_t *router, uint8_t num_ports)
     router->num_ports = num_ports;
 }
 
-sw_result_t sw_router_add_route(sw_router_t *router,
+sw_status_t sw_router_add_route(sw_router_t *router,
                                 uint8_t logical_addr,
                                 uint8_t output_port,
                                 int delete_addr)
@@ -70,14 +70,14 @@ sw_result_t sw_router_add_route(sw_router_t *router,
  * @brief Discard a packet whose leading address references a non-existent port
  *        or an unconfigured routing-table entry (clause 5.6.8.5).
  * @param[in,out] router Router whose counters are updated.
- * @return Always ::SW_ROUTE_DISCARD.
+ * @return Always ::SW_WRONG_ADDRESS.
  */
-static sw_route_result_t sw_router_invalid_address(sw_router_t *router)
+static sw_status_t sw_router_invalid_address(sw_router_t *router)
 {
     router->invalid_address_errors++;
     router->packets_discarded++;
 
-    return SW_ROUTE_DISCARD;
+    return SW_WRONG_ADDRESS;
 }
 
 /**
@@ -124,22 +124,22 @@ static int sw_router_resolve(const sw_router_t *router, uint8_t lead, sw_route_e
     return 1;
 }
 
-sw_route_result_t sw_router_route(sw_router_t *router,
-                                  const uint8_t *packet,
-                                  size_t len,
-                                  uint8_t *output_port,
-                                  uint8_t *delete_leading)
+sw_status_t sw_router_route(sw_router_t *router,
+                            const uint8_t *packet,
+                            size_t len,
+                            uint8_t *output_port,
+                            uint8_t *delete_leading)
 {
     if ((!router) || (!packet) || (!output_port) || (!delete_leading))
     {
-        return SW_ROUTE_DISCARD;
+        return SW_INVALID_PARAM;
     }
 
     /* An empty packet is discarded by the first routing switch (clause 5.6.2.1). */
     if (len == 0)
     {
         router->packets_discarded++;
-        return SW_ROUTE_DISCARD;
+        return SW_WRONG_LENGTH;
     }
 
     sw_route_entry_t route;
@@ -153,5 +153,5 @@ sw_route_result_t sw_router_route(sw_router_t *router,
     *delete_leading = route.delete_addr ? 1u : 0u;
     router->packets_routed++;
 
-    return SW_ROUTE_OK;
+    return SW_OK;
 }

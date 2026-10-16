@@ -53,19 +53,19 @@ static int test_router_path_addressing(void)
 
     /* Leading char 3 -> output port 3, always deleted (clause 5.6.8.3). */
     const uint8_t pkt[3] = {3, 0xAA, 0xBB};
-    ASSERT_EQ_INT(SW_ROUTE_OK, sw_router_route(&router, pkt, sizeof(pkt), &port, &del));
+    ASSERT_EQ_INT(SW_OK, sw_router_route(&router, pkt, sizeof(pkt), &port, &del));
     ASSERT_EQ_INT(3, port);
     ASSERT_EQ_INT(1, del);
 
     /* Leading char 0 -> configuration port. */
     const uint8_t cfg[2] = {0, 0x11};
-    ASSERT_EQ_INT(SW_ROUTE_OK, sw_router_route(&router, cfg, sizeof(cfg), &port, &del));
+    ASSERT_EQ_INT(SW_OK, sw_router_route(&router, cfg, sizeof(cfg), &port, &del));
     ASSERT_EQ_INT(SW_PORT_CONFIG, port);
     ASSERT_EQ_INT(1, del);
 
     /* A path char referencing a non-existent port is discarded (clause 5.6.8.5). */
     const uint8_t bad[2] = {20, 0x11};
-    ASSERT_EQ_INT(SW_ROUTE_DISCARD, sw_router_route(&router, bad, sizeof(bad), &port, &del));
+    ASSERT_EQ_INT(SW_WRONG_ADDRESS, sw_router_route(&router, bad, sizeof(bad), &port, &del));
     ASSERT_EQ_INT(1, (int)router.invalid_address_errors);
     ASSERT_EQ_INT(2, (int)router.packets_routed);
     ASSERT_EQ_INT(1, (int)router.packets_discarded);
@@ -83,10 +83,10 @@ static int test_router_path_port_bounds(void)
     const uint8_t last_port[1] = {7};
     const uint8_t first_missing[1] = {8};
 
-    ASSERT_EQ_INT(SW_ROUTE_OK, sw_router_route(&router, last_port, sizeof(last_port), &port, &del));
+    ASSERT_EQ_INT(SW_OK, sw_router_route(&router, last_port, sizeof(last_port), &port, &del));
     ASSERT_EQ_INT(7, port);
     ASSERT_EQ_INT(1, del);
-    ASSERT_EQ_INT(SW_ROUTE_DISCARD,
+    ASSERT_EQ_INT(SW_WRONG_ADDRESS,
                   sw_router_route(&router, first_missing, sizeof(first_missing), &port, &del));
     ASSERT_EQ_INT(1, (int)router.packets_routed);
     ASSERT_EQ_INT(1, (int)router.invalid_address_errors);
@@ -104,19 +104,18 @@ static int test_router_path_logical_boundary(void)
     const uint8_t highest_path[1] = {31};
     const uint8_t lowest_logical[1] = {32};
 
-    ASSERT_EQ_INT(SW_ROUTE_OK,
-                  sw_router_route(&router, highest_path, sizeof(highest_path), &port, &del));
+    ASSERT_EQ_INT(SW_OK, sw_router_route(&router, highest_path, sizeof(highest_path), &port, &del));
     ASSERT_EQ_INT(31, port);
     ASSERT_EQ_INT(1, del);
 
     /* Unconfigured, 32 is an invalid logical address, not a path to port 32. */
-    ASSERT_EQ_INT(SW_ROUTE_DISCARD,
+    ASSERT_EQ_INT(SW_WRONG_ADDRESS,
                   sw_router_route(&router, lowest_logical, sizeof(lowest_logical), &port, &del));
     ASSERT_EQ_INT(1, (int)router.invalid_address_errors);
 
     /* Configured, it follows the routing table and keeps its address. */
     ASSERT_EQ_INT(SW_OK, sw_router_add_route(&router, 32, 5, 0));
-    ASSERT_EQ_INT(SW_ROUTE_OK,
+    ASSERT_EQ_INT(SW_OK,
                   sw_router_route(&router, lowest_logical, sizeof(lowest_logical), &port, &del));
     ASSERT_EQ_INT(5, port);
     ASSERT_EQ_INT(0, del);
@@ -137,23 +136,23 @@ static int test_router_logical_addressing(void)
 
     /* Logical address retained by default (clause 5.6.8.4 f). */
     const uint8_t p1[2] = {0x40, 0x99};
-    ASSERT_EQ_INT(SW_ROUTE_OK, sw_router_route(&router, p1, sizeof(p1), &port, &del));
+    ASSERT_EQ_INT(SW_OK, sw_router_route(&router, p1, sizeof(p1), &port, &del));
     ASSERT_EQ_INT(5, port);
     ASSERT_EQ_INT(0, del);
 
     /* Logical address deleted when configured to (clause 5.6.8.6). */
     const uint8_t p2[2] = {0x41, 0x99};
-    ASSERT_EQ_INT(SW_ROUTE_OK, sw_router_route(&router, p2, sizeof(p2), &port, &del));
+    ASSERT_EQ_INT(SW_OK, sw_router_route(&router, p2, sizeof(p2), &port, &del));
     ASSERT_EQ_INT(6, port);
     ASSERT_EQ_INT(1, del);
 
     /* Unconfigured logical address -> discard + error. */
     const uint8_t p3[2] = {0x77, 0x99};
-    ASSERT_EQ_INT(SW_ROUTE_DISCARD, sw_router_route(&router, p3, sizeof(p3), &port, &del));
+    ASSERT_EQ_INT(SW_WRONG_ADDRESS, sw_router_route(&router, p3, sizeof(p3), &port, &del));
 
     /* Reserved logical address 255 -> discard + error (clause 5.6.8.5 NOTE). */
     const uint8_t p4[2] = {0xFF, 0x99};
-    ASSERT_EQ_INT(SW_ROUTE_DISCARD, sw_router_route(&router, p4, sizeof(p4), &port, &del));
+    ASSERT_EQ_INT(SW_WRONG_ADDRESS, sw_router_route(&router, p4, sizeof(p4), &port, &del));
     ASSERT_EQ_INT(2, (int)router.invalid_address_errors);
     ASSERT_EQ_INT(2, (int)router.packets_routed);
     ASSERT_EQ_INT(2, (int)router.packets_discarded);
@@ -175,7 +174,7 @@ static int test_router_logical_route_stale_port(void)
     uint8_t port = 0xFF;
     uint8_t del = 0xFF;
     const uint8_t pkt[2] = {0x40, 0x99};
-    ASSERT_EQ_INT(SW_ROUTE_DISCARD, sw_router_route(&router, pkt, sizeof(pkt), &port, &del));
+    ASSERT_EQ_INT(SW_WRONG_ADDRESS, sw_router_route(&router, pkt, sizeof(pkt), &port, &del));
     ASSERT_EQ_INT(1, (int)router.invalid_address_errors);
     return 0;
 }
@@ -194,14 +193,14 @@ static int test_router_logical_route_to_config_port(void)
     uint8_t port = 0xEE;
     uint8_t del = 0xEE;
     const uint8_t logical[2] = {0x40, 0x99};
-    ASSERT_EQ_INT(SW_ROUTE_DISCARD,
+    ASSERT_EQ_INT(SW_WRONG_ADDRESS,
                   sw_router_route(&router, logical, sizeof(logical), &port, &del));
     ASSERT_EQ_INT(1, (int)router.invalid_address_errors);
     ASSERT_EQ_INT(0xEE, port);
     ASSERT_EQ_INT(0xEE, del);
 
     const uint8_t path[2] = {SW_PORT_CONFIG, 0x99};
-    ASSERT_EQ_INT(SW_ROUTE_OK, sw_router_route(&router, path, sizeof(path), &port, &del));
+    ASSERT_EQ_INT(SW_OK, sw_router_route(&router, path, sizeof(path), &port, &del));
     ASSERT_EQ_INT(SW_PORT_CONFIG, port);
     ASSERT_EQ_INT(1, del);
     return 0;
@@ -237,15 +236,15 @@ static int test_router_route_invalid_args_and_empty(void)
     uint8_t port = 0;
     uint8_t del = 0;
 
-    ASSERT_EQ_INT(SW_ROUTE_DISCARD, sw_router_route(NULL, pkt, sizeof(pkt), &port, &del));
-    ASSERT_EQ_INT(SW_ROUTE_DISCARD, sw_router_route(&router, NULL, sizeof(pkt), &port, &del));
-    ASSERT_EQ_INT(SW_ROUTE_DISCARD, sw_router_route(&router, pkt, sizeof(pkt), NULL, &del));
-    ASSERT_EQ_INT(SW_ROUTE_DISCARD, sw_router_route(&router, pkt, sizeof(pkt), &port, NULL));
+    ASSERT_EQ_INT(SW_INVALID_PARAM, sw_router_route(NULL, pkt, sizeof(pkt), &port, &del));
+    ASSERT_EQ_INT(SW_INVALID_PARAM, sw_router_route(&router, NULL, sizeof(pkt), &port, &del));
+    ASSERT_EQ_INT(SW_INVALID_PARAM, sw_router_route(&router, pkt, sizeof(pkt), NULL, &del));
+    ASSERT_EQ_INT(SW_INVALID_PARAM, sw_router_route(&router, pkt, sizeof(pkt), &port, NULL));
     /* Invalid arguments are rejected before any counter is touched. */
     ASSERT_EQ_INT(0, (int)router.packets_discarded);
 
     /* An empty packet is discarded by the first routing switch (clause 5.6.2.1). */
-    ASSERT_EQ_INT(SW_ROUTE_DISCARD, sw_router_route(&router, pkt, 0, &port, &del));
+    ASSERT_EQ_INT(SW_WRONG_LENGTH, sw_router_route(&router, pkt, 0, &port, &del));
     ASSERT_EQ_INT(1, (int)router.packets_discarded);
     return 0;
 }
@@ -264,14 +263,14 @@ static int test_router_route_discard_leaves_outputs_unchanged(void)
     uint8_t port = 0xEE;
     uint8_t del = 0xEE;
 
-    ASSERT_EQ_INT(SW_ROUTE_DISCARD, sw_router_route(NULL, stale, sizeof(stale), &port, &del));
-    ASSERT_EQ_INT(SW_ROUTE_DISCARD, sw_router_route(&router, NULL, sizeof(stale), &port, &del));
-    ASSERT_EQ_INT(SW_ROUTE_DISCARD, sw_router_route(&router, stale, 0, &port, &del));
-    ASSERT_EQ_INT(SW_ROUTE_DISCARD,
+    ASSERT_EQ_INT(SW_INVALID_PARAM, sw_router_route(NULL, stale, sizeof(stale), &port, &del));
+    ASSERT_EQ_INT(SW_INVALID_PARAM, sw_router_route(&router, NULL, sizeof(stale), &port, &del));
+    ASSERT_EQ_INT(SW_WRONG_LENGTH, sw_router_route(&router, stale, 0, &port, &del));
+    ASSERT_EQ_INT(SW_WRONG_ADDRESS,
                   sw_router_route(&router, missing_port, sizeof(missing_port), &port, &del));
-    ASSERT_EQ_INT(SW_ROUTE_DISCARD,
+    ASSERT_EQ_INT(SW_WRONG_ADDRESS,
                   sw_router_route(&router, unconfigured, sizeof(unconfigured), &port, &del));
-    ASSERT_EQ_INT(SW_ROUTE_DISCARD, sw_router_route(&router, stale, sizeof(stale), &port, &del));
+    ASSERT_EQ_INT(SW_WRONG_ADDRESS, sw_router_route(&router, stale, sizeof(stale), &port, &del));
 
     ASSERT_EQ_INT(0xEE, port);
     ASSERT_EQ_INT(0xEE, del);

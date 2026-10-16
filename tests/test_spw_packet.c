@@ -46,10 +46,13 @@ static int build_exact(const uint8_t *dest,
         return 1;
     }
 
-    const size_t n = sw_spw_packet_build(dest, dest_len, cargo, cargo_len, buf, expected_len);
+    size_t n = 0;
+    const sw_status_t status =
+        sw_spw_packet_build(dest, dest_len, cargo, cargo_len, buf, expected_len, &n);
     const int matches = (n == expected_len) && (memcmp(buf, expected, expected_len) == 0);
     free(buf);
 
+    ASSERT_EQ_INT(SW_OK, status);
     ASSERT_EQ_UINT(expected_len, n);
     ASSERT_TRUE(matches);
     return 0;
@@ -121,7 +124,9 @@ static int test_spw_packet_build_one_short(void)
     }
     memset(buf, FILL, one_short);
 
-    const size_t n = sw_spw_packet_build(dest, sizeof(dest), cargo, sizeof(cargo), buf, one_short);
+    size_t n = SIZE_MAX;
+    const sw_status_t status =
+        sw_spw_packet_build(dest, sizeof(dest), cargo, sizeof(cargo), buf, one_short, &n);
     int untouched = 1;
     for (size_t i = 0; i < one_short; i++)
     {
@@ -129,7 +134,8 @@ static int test_spw_packet_build_one_short(void)
     }
     free(buf);
 
-    ASSERT_EQ_UINT(0, n);
+    ASSERT_EQ_INT(SW_BUFFER_TOO_SMALL, status);
+    ASSERT_EQ_UINT(SIZE_MAX, n);
     ASSERT_TRUE(untouched);
     return 0;
 }
@@ -146,10 +152,13 @@ static int expect_length_rejected(size_t dest_len, size_t cargo_len, size_t buf_
     const uint8_t cargo[8] = {0x11};
     const uint8_t untouched[8] = {FILL, FILL, FILL, FILL, FILL, FILL, FILL, FILL};
     uint8_t buf[8];
+    size_t n = SIZE_MAX;
     memset(buf, FILL, sizeof(buf));
 
-    ASSERT_EQ_UINT(0, sw_spw_packet_build(dest, dest_len, cargo, cargo_len, buf, buf_len));
+    ASSERT_EQ_INT(SW_BUFFER_TOO_SMALL,
+                  sw_spw_packet_build(dest, dest_len, cargo, cargo_len, buf, buf_len, &n));
     ASSERT_EQ_MEM(buf, untouched, sizeof(untouched));
+    ASSERT_EQ_UINT(SIZE_MAX, n);
     return 0;
 }
 
@@ -173,38 +182,44 @@ static int test_spw_packet_build_dest_longer_than_buffer(void)
     return 0;
 }
 
+/* Each kind of bad call is reported with its own status. The buffer is large enough
+ * for success, so no check is masked by the size check. */
 static int test_spw_packet_build_errors(void)
 {
     const uint8_t dest[1] = {0x40};
     const uint8_t cargo[2] = {0x11, 0x22};
-    uint8_t buf[2];
+    uint8_t buf[8];
+    size_t n = 0;
 
-    /* NULL output buffer. */
-    ASSERT_EQ_INT(0, sw_spw_packet_build(dest, 1, cargo, 2, NULL, 8));
-    /* dest_len > 0 but dest NULL. */
-    ASSERT_EQ_INT(0, sw_spw_packet_build(NULL, 1, cargo, 2, buf, sizeof(buf)));
-    /* cargo_len > 0 but cargo NULL. */
-    ASSERT_EQ_INT(0, sw_spw_packet_build(dest, 1, NULL, 2, buf, sizeof(buf)));
+    ASSERT_EQ_INT(SW_INVALID_PARAM, sw_spw_packet_build(dest, 1, cargo, 2, NULL, 8, &n));
+    ASSERT_EQ_INT(SW_INVALID_PARAM, sw_spw_packet_build(dest, 1, cargo, 2, buf, sizeof(buf), NULL));
+    /* A part with a non-zero length but no octets. */
+    ASSERT_EQ_INT(SW_INVALID_PARAM, sw_spw_packet_build(NULL, 1, cargo, 2, buf, sizeof(buf), &n));
+    ASSERT_EQ_INT(SW_INVALID_PARAM, sw_spw_packet_build(dest, 1, NULL, 2, buf, sizeof(buf), &n));
+    /* A packet carries at least one data character (clause 5.6.2.1). */
+    ASSERT_EQ_INT(SW_WRONG_LENGTH, sw_spw_packet_build(NULL, 0, NULL, 0, buf, sizeof(buf), &n));
     /* Total length exceeds the buffer (1 + 2 > 2). */
-    ASSERT_EQ_INT(0, sw_spw_packet_build(dest, 1, cargo, 2, buf, sizeof(buf)));
-    /* Empty packet (no data characters). */
-    ASSERT_EQ_INT(0, sw_spw_packet_build(NULL, 0, NULL, 0, buf, sizeof(buf)));
+    ASSERT_EQ_INT(SW_BUFFER_TOO_SMALL, sw_spw_packet_build(dest, 1, cargo, 2, buf, 2, &n));
     return 0;
 }
 
-/* Every rejected call leaves the output buffer exactly as the caller passed it. */
-static int test_spw_packet_build_failure_leaves_buffer_unchanged(void)
+/* Every rejected call leaves the output buffer and the length exactly as the caller
+ * passed them. */
+static int test_spw_packet_build_failure_leaves_outputs_unchanged(void)
 {
     const uint8_t dest[1] = {0x40};
     const uint8_t cargo[2] = {0x11, 0x22};
-    const uint8_t untouched[2] = {0x5A, 0x5A};
-    uint8_t buf[2] = {0x5A, 0x5A};
+    const uint8_t untouched[2] = {FILL, FILL};
+    uint8_t buf[2] = {FILL, FILL};
+    size_t n = SIZE_MAX;
 
-    ASSERT_EQ_INT(0, sw_spw_packet_build(NULL, 1, cargo, 2, buf, sizeof(buf)));
-    ASSERT_EQ_INT(0, sw_spw_packet_build(dest, 1, NULL, 2, buf, sizeof(buf)));
-    ASSERT_EQ_INT(0, sw_spw_packet_build(dest, 1, cargo, 2, buf, sizeof(buf))); /* one short */
-    ASSERT_EQ_INT(0, sw_spw_packet_build(NULL, 0, NULL, 0, buf, sizeof(buf)));
+    ASSERT_EQ_INT(SW_INVALID_PARAM, sw_spw_packet_build(NULL, 1, cargo, 2, buf, sizeof(buf), &n));
+    ASSERT_EQ_INT(SW_INVALID_PARAM, sw_spw_packet_build(dest, 1, NULL, 2, buf, sizeof(buf), &n));
+    ASSERT_EQ_INT(SW_BUFFER_TOO_SMALL,
+                  sw_spw_packet_build(dest, 1, cargo, 2, buf, sizeof(buf), &n)); /* one short */
+    ASSERT_EQ_INT(SW_WRONG_LENGTH, sw_spw_packet_build(NULL, 0, NULL, 0, buf, sizeof(buf), &n));
     ASSERT_EQ_MEM(buf, untouched, sizeof(untouched));
+    ASSERT_EQ_UINT(SIZE_MAX, n);
     return 0;
 }
 
@@ -219,6 +234,6 @@ test_result_t test_spacewire_spw_packet_run_all(void)
     RUN_TEST(test_spw_packet_build_length_overflow_rejected);
     RUN_TEST(test_spw_packet_build_dest_longer_than_buffer);
     RUN_TEST(test_spw_packet_build_errors);
-    RUN_TEST(test_spw_packet_build_failure_leaves_buffer_unchanged);
+    RUN_TEST(test_spw_packet_build_failure_leaves_outputs_unchanged);
     return (test_result_t){cunit_total_tests - cunit_overall_failures, cunit_total_tests};
 }

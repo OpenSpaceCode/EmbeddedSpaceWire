@@ -36,33 +36,46 @@
 static sw_ptp_statistics_t g_sw_stats = {0};
 
 /**
- * @brief Check that a frame's Target SpaceWire Address is usable (clause 5.3.1).
+ * @brief Check a frame's addressing fields and the carried packet's length.
  *
- * Clause 5.3.1 b allows path and regional addressing, so each octet is either a
- * path address (0..31) or a logical address (32..254) that a router deletes on the
- * way (ECSS-E-ST-50-12C clause 5.6.8.6). Only the reserved logical address 255 is
- * refused (ECSS-E-ST-50-12C clause 5.6.8.4 d).
+ * The Target Logical Address is a logical address, 32..254: 255 shall not be used
+ * (ECSS-E-ST-50-12C clause 5.6.8.4 a, d), and a value in 0..31 is a path address
+ * that the first router would take as a port number and delete (clause 5.6.8.3 a,
+ * c, e). The Target SpaceWire Address may mix path (0..31) and regional logical
+ * (32..254) octets (ECSS-E-ST-50-53C clause 5.3.1 b); only 255 is refused. The
+ * carried packet is 7..65542 octets (clause 5.1.2 a).
  *
- * @param[in] pf Packet frame; must be non-NULL.
- * @return 1 if the address is empty, or present with no octet equal to
- *         ::SW_LOGICAL_ADDR_RESERVED; otherwise 0.
+ * @param[in] pf          Packet frame; must be non-NULL.
+ * @param[in] payload_len Serialised size of the carried packet.
+ * @return ::SW_OK, ::SW_WRONG_ADDRESS, ::SW_INVALID_PARAM (address octets
+ *         announced but @p pf->path is NULL) or ::SW_WRONG_LENGTH.
  */
-static int sw_ptp_address_is_valid(const sw_ptp_frame_t *pf)
+static sw_status_t sw_ptp_validate(const sw_ptp_frame_t *pf, uint32_t payload_len)
 {
+    if ((pf->logical_addr < SW_LOGICAL_ADDR_MIN) || (pf->logical_addr == SW_LOGICAL_ADDR_RESERVED))
+    {
+        return SW_WRONG_ADDRESS;
+    }
+
     if ((pf->path_len > 0u) && (!pf->path))
     {
-        return 0;
+        return SW_INVALID_PARAM;
     }
 
     for (uint8_t i = 0; i < pf->path_len; i++)
     {
         if (pf->path[i] == SW_LOGICAL_ADDR_RESERVED)
         {
-            return 0;
+            return SW_WRONG_ADDRESS;
         }
     }
 
-    return 1;
+    if ((payload_len < SW_PTP_CCSDS_MIN_LEN) || (payload_len > SW_PTP_CCSDS_MAX_LEN))
+    {
+        return SW_WRONG_LENGTH;
+    }
+
+    return SW_OK;
 }
 
 /**
@@ -88,85 +101,45 @@ static void sw_ptp_write_header(const sw_ptp_frame_t *pf, uint8_t *buf)
     header[SW_PTP_OFFSET_USER_APP] = pf->user_app;
 }
 
-uint32_t sw_ptp_encode(const sw_ptp_frame_t *pf,
-                       const void *payload,
-                       uint8_t *buf,
-                       uint32_t buf_len)
+sw_status_t sw_ptp_encode(const sw_ptp_frame_t *pf,
+                          const void *payload,
+                          uint8_t *buf,
+                          uint32_t buf_len,
+                          uint32_t *out_len)
 {
-    if ((!pf) || (!payload) || (!buf))
+    if ((!pf) || (!payload) || (!buf) || (!out_len))
     {
-        return 0;
-    }
-
-    /* A logical address is 32..255 and 255 shall not be used (ECSS-E-ST-50-12C
-     * clause 5.6.8.4 a, d). A value in 0..31 is a path address instead: the first
-     * router would forward the packet to that port number and delete the octet
-     * (clause 5.6.8.3 a, c, e). */
-    if ((pf->logical_addr < SW_LOGICAL_ADDR_MIN) || (pf->logical_addr == SW_LOGICAL_ADDR_RESERVED))
-    {
-        return 0;
-    }
-
-    if (!sw_ptp_address_is_valid(pf))
-    {
-        return 0;
+        return SW_INVALID_PARAM;
     }
 
     const uint32_t payload_len = sw_payload_size(payload);
-    if ((payload_len < SW_PTP_CCSDS_MIN_LEN) || (payload_len > SW_PTP_CCSDS_MAX_LEN))
+    const sw_status_t valid = sw_ptp_validate(pf, payload_len);
+    if (valid != SW_OK)
     {
-        return 0;
+        return valid;
     }
 
     const uint32_t header_len = (uint32_t)pf->path_len + SW_PTP_HEADER_LEN;
     const uint32_t total = header_len + payload_len;
     if (buf_len < total)
     {
-        return 0;
+        return SW_BUFFER_TOO_SMALL;
     }
 
     /* The carried packet is serialised before the header is written, so a
      * failing hook leaves the caller's buffer untouched. */
-    if (sw_payload_serialize(payload, &buf[header_len], buf_len - header_len) != payload_len)
+    if (sw_payload_serialize(payload, &buf[header_len], buf_len - header_len) != SW_OK)
     {
-        return 0;
+        return SW_PAYLOAD_ERROR;
     }
 
     sw_ptp_write_header(pf, buf);
 
     g_sw_stats.packets_sent++;
     g_sw_stats.bytes_sent += total;
+    *out_len = total;
 
-    return total;
-}
-
-/**
- * @brief Write the receive status if the caller asked for it.
- *
- * @param[out] status Receive-status output; may be NULL.
- * @param[in]  code   Status code to report.
- */
-static void sw_ptp_report(sw_ptp_status_t *status, sw_ptp_status_t code)
-{
-    if (status)
-    {
-        *status = code;
-    }
-}
-
-/**
- * @brief Count a discarded packet and report why (clause 5.5.4).
- *
- * @param[out] status Receive-status output; may be NULL.
- * @param[in]  code   Status code to report.
- * @return Always ::SW_ERR.
- */
-static sw_result_t sw_ptp_discard(sw_ptp_status_t *status, sw_ptp_status_t code)
-{
-    g_sw_stats.packets_discarded++;
-    sw_ptp_report(status, code);
-
-    return SW_ERR;
+    return SW_OK;
 }
 
 /**
@@ -176,48 +149,55 @@ static sw_result_t sw_ptp_discard(sw_ptp_status_t *status, sw_ptp_status_t code)
  * whatever its length or format (clauses 4.3 and 5.5.4.2 a); the payload adapter
  * alone decides whether it can be extracted.
  *
- * @param[in] buf     Received buffer; must be non-NULL.
- * @param[in] buf_len Buffer length in octets.
- * @param[in] end     End-of-packet marker reported by the link layer.
- * @return ::SW_PTP_STATUS_OK if the packet may be extracted, otherwise the
- *         status to report for the discard.
+ * @param[in]  buf     Received buffer; must be non-NULL.
+ * @param[in]  buf_len Buffer length in octets.
+ * @param[in]  end     End-of-packet marker reported by the link layer.
+ * @param[out] code    Receive status of a ::SW_DISCARDED packet; written only then.
+ * @return ::SW_OK if the packet may be extracted; ::SW_DISCARDED for a discard
+ *         defined by the standard (EEP, non-zero Reserved field); otherwise
+ *         ::SW_INVALID_PARAM, ::SW_WRONG_LENGTH or ::SW_WRONG_PROTOCOL.
  */
-static sw_ptp_status_t sw_ptp_check(const uint8_t *buf, uint32_t buf_len, sw_end_marker_t end)
+static sw_status_t sw_ptp_check(const uint8_t *buf,
+                                uint32_t buf_len,
+                                sw_end_marker_t end,
+                                sw_ptp_status_t *code)
 {
     /* clause 5.5.4.4: a packet terminated by EEP shall be discarded. */
     if (end == SW_END_EEP)
     {
-        return SW_PTP_STATUS_EEP;
+        *code = SW_PTP_STATUS_EEP;
+        return SW_DISCARDED;
     }
 
     /* Fail closed: a marker the link layer cannot have meant as EOP delivers nothing. */
     if (end != SW_END_EOP)
     {
-        return SW_PTP_STATUS_INVALID;
+        return SW_INVALID_PARAM;
     }
 
     /* Without a complete header the packet cannot be identified at all. */
     if (buf_len < SW_PTP_HEADER_LEN)
     {
-        return SW_PTP_STATUS_INVALID;
+        return SW_WRONG_LENGTH;
     }
 
     /* clause 5.5.4.1: only Protocol Identifier 0x02 is a CCSDS PTP packet. */
     if (buf[SW_PTP_OFFSET_PROTOCOL_ID] != SW_PTP_PROTOCOL_ID)
     {
-        return SW_PTP_STATUS_INVALID;
+        return SW_WRONG_PROTOCOL;
     }
 
     /* clause 5.5.4.3: a non-zero Reserved field discards the packet. */
     if (buf[SW_PTP_OFFSET_RESERVED] != SW_PTP_RESERVED)
     {
-        return SW_PTP_STATUS_RESERVED_NONZERO;
+        *code = SW_PTP_STATUS_RESERVED_NONZERO;
+        return SW_DISCARDED;
     }
 
-    return SW_PTP_STATUS_OK;
+    return SW_OK;
 }
 
-sw_result_t sw_ptp_decode(sw_ptp_frame_t *pf,
+sw_status_t sw_ptp_decode(sw_ptp_frame_t *pf,
                           void *payload,
                           const uint8_t *buf,
                           uint32_t buf_len,
@@ -226,48 +206,56 @@ sw_result_t sw_ptp_decode(sw_ptp_frame_t *pf,
 {
     if ((!pf) || (!payload) || (!buf))
     {
-        sw_ptp_report(status, SW_PTP_STATUS_INVALID);
-
         return SW_INVALID_PARAM;
     }
 
-    const sw_ptp_status_t code = sw_ptp_check(buf, buf_len, end);
-    if (code != SW_PTP_STATUS_OK)
-    {
-        return sw_ptp_discard(status, code);
-    }
+    sw_ptp_status_t code = SW_PTP_STATUS_OK;
+    sw_status_t result = sw_ptp_check(buf, buf_len, end, &code);
 
     /* clause 5.5.4.2: extract the carried packet. A hook that cannot represent it
      * fails and leaves the payload object unchanged; nothing is delivered then. */
-    if (!sw_payload_parse(payload, &buf[SW_PTP_HEADER_LEN], buf_len - SW_PTP_HEADER_LEN))
+    if ((result == SW_OK) &&
+        (sw_payload_parse(payload, &buf[SW_PTP_HEADER_LEN], buf_len - SW_PTP_HEADER_LEN) != SW_OK))
     {
-        return sw_ptp_discard(status, SW_PTP_STATUS_INVALID);
+        result = SW_PAYLOAD_ERROR;
     }
 
-    pf->path = NULL;
-    pf->path_len = 0;
-    pf->logical_addr = buf[SW_PTP_OFFSET_LOGICAL_ADDR];
-    pf->user_app = buf[SW_PTP_OFFSET_USER_APP];
+    if (result != SW_OK)
+    {
+        g_sw_stats.packets_discarded++;
+    }
+    else
+    {
+        pf->path = NULL;
+        pf->path_len = 0;
+        pf->logical_addr = buf[SW_PTP_OFFSET_LOGICAL_ADDR];
+        pf->user_app = buf[SW_PTP_OFFSET_USER_APP];
+        g_sw_stats.packets_received++;
+        g_sw_stats.bytes_received += buf_len;
+    }
 
-    g_sw_stats.packets_received++;
-    g_sw_stats.bytes_received += buf_len;
-    sw_ptp_report(status, SW_PTP_STATUS_OK);
+    /* The status carries the standard's codes only (clauses 5.1.3, 5.2.3.2 c). */
+    if ((status) && ((result == SW_OK) || (result == SW_DISCARDED)))
+    {
+        *status = code;
+    }
 
-    return SW_OK;
+    return result;
 }
 
-uint32_t sw_ptp_create(uint8_t logical_addr,
-                       uint8_t user_app,
-                       const void *payload,
-                       uint8_t *buf,
-                       uint32_t buf_len)
+sw_status_t sw_ptp_create(uint8_t logical_addr,
+                          uint8_t user_app,
+                          const void *payload,
+                          uint8_t *buf,
+                          uint32_t buf_len,
+                          uint32_t *out_len)
 {
     const sw_ptp_frame_t pf = {.path = NULL,
                                .path_len = 0,
                                .logical_addr = logical_addr,
                                .user_app = user_app};
 
-    return sw_ptp_encode(&pf, payload, buf, buf_len);
+    return sw_ptp_encode(&pf, payload, buf, buf_len, out_len);
 }
 
 void sw_ptp_get_statistics(sw_ptp_statistics_t *stats)

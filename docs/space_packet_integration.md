@@ -24,14 +24,16 @@ uint32_t sw_payload_size(const void *payload)
     return sp_packet_serialize_size(payload);
 }
 
-uint32_t sw_payload_serialize(const void *payload, uint8_t *buf, uint32_t buf_len)
+sw_status_t sw_payload_serialize(const void *payload, uint8_t *buf, uint32_t buf_len)
 {
-    return sp_packet_serialize(payload, buf, buf_len);
+    /* sp_packet_serialize() returns the octets written, which is the serialised size. */
+    return (sp_packet_serialize(payload, buf, buf_len) != 0u) ? SW_OK : SW_PAYLOAD_ERROR;
 }
 
-int sw_payload_parse(void *payload, const uint8_t *buf, uint32_t buf_len)
+sw_status_t sw_payload_parse(void *payload, const uint8_t *buf, uint32_t buf_len)
 {
-    return sp_packet_parse(payload, buf, buf_len);
+    /* sp_packet_parse() returns 1 on success and 0 on failure. */
+    return (sp_packet_parse(payload, buf, buf_len) != 0) ? SW_OK : SW_PAYLOAD_ERROR;
 }
 ```
 
@@ -77,12 +79,15 @@ sp_set_primary_header(&pkt, SP_PACKET_TYPE_TC, 0, 0x042, SP_SEQ_FLAG_UNSEGMENTED
 sp_set_data(&pkt, data, sizeof(data));
 
 const sw_ptp_frame_t frame = {.path = NULL,
-                                 .path_len = 0,
-                                 .logical_addr = SW_PTP_LOGICAL_ADDR_DEFAULT,
-                                 .user_app = 0x00};
+                              .path_len = 0,
+                              .logical_addr = SW_PTP_LOGICAL_ADDR_DEFAULT,
+                              .user_app = 0x00};
 uint8_t wire[64];
-const uint32_t n = sw_ptp_encode(&frame, &pkt, wire, sizeof(wire));
-/* wire: FE 02 00 00 | 10 42 C0 01 00 03 | DE AD BE EF */
+uint32_t n = 0;
+if (sw_ptp_encode(&frame, &pkt, wire, sizeof(wire), &n) == SW_OK)
+{
+    /* wire[0..n-1]: FE 02 00 00 | 10 42 C0 01 00 03 | DE AD BE EF */
+}
 
 sw_ptp_frame_t rx_frame;
 sp_packet_t rx_pkt;
@@ -103,16 +108,20 @@ Protocol Identifier and Reserved field (clause 5.5.4). It does not check the
 carried packet's length or format (clauses 4.3 and 5.5.4.2 a); every octet after
 the header goes to `sw_payload_parse()`.
 
-With these overrides, `sw_ptp_decode()` therefore returns `SW_ERR` with status
-`SW_PTP_STATUS_INVALID`, and leaves `rx_frame` and `rx_pkt` unchanged, when:
+With these overrides, `sw_ptp_decode()` therefore leaves `rx_frame`, `rx_pkt`
+and `status` unchanged and returns:
 
-| Input | Detected by |
-|---|---|
-| Fewer than 4 octets (no complete header) | the packet transfer layer |
-| Protocol Identifier other than 0x02 | the packet transfer layer (clause 5.5.4.1) |
-| Fewer than 6 octets after the header | `sp_packet_parse()` |
-| Packet Version Number other than 0 | `sp_packet_parse()` |
-| Space Packet cut short | `sp_packet_parse()` |
+| Input | Returns | Detected by |
+|---|---|---|
+| Fewer than 4 octets (no complete header) | `SW_WRONG_LENGTH` | the packet transfer layer |
+| Protocol Identifier other than 0x02 | `SW_WRONG_PROTOCOL` | the packet transfer layer (clause 5.5.4.1) |
+| Fewer than 6 octets after the header | `SW_PAYLOAD_ERROR` | `sp_packet_parse()` |
+| Packet Version Number other than 0 | `SW_PAYLOAD_ERROR` | `sp_packet_parse()` |
+| Space Packet cut short | `SW_PAYLOAD_ERROR` | `sp_packet_parse()` |
+
+The two discards the standard defines, EEP and a non-zero Reserved field, return
+`SW_DISCARDED` and set `status` to `SW_PTP_STATUS_EEP` or
+`SW_PTP_STATUS_RESERVED_NONZERO`.
 
 Octets left over after the Space Packet are not rejected: `sp_packet_parse()`
 reads the length the packet declares and ignores the rest.
@@ -121,11 +130,12 @@ reads the length the packet declares and ignores the rest.
 
 The same rules apply if you carry a protocol other than Space Packets:
 
-- Report errors through the return value: 0 from every hook means failure.
+- Return `SW_OK` on success and a negative `sw_status_t` on failure (any code;
+  the library reports every hook failure as `SW_PAYLOAD_ERROR`).
 - Leave outputs unchanged on failure. `sw_ptp_encode()` and
   `sw_ptp_decode()` rely on this to keep their own buffers and objects
   untouched when they fail.
-- `sw_payload_serialize()` must return exactly what `sw_payload_size()` returns
-  for the same object.
+- On `SW_OK`, `sw_payload_serialize()` must have written exactly
+  `sw_payload_size()` octets for the same object.
 - `sw_payload_parse()` receives every octet after the header, unchecked. It must
-  not read past `buf_len`, and returns 0 if it cannot extract a packet.
+  not read past `buf_len`, and returns an error if it cannot extract a packet.

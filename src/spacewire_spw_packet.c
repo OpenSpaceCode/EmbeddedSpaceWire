@@ -17,36 +17,32 @@
 
 #include <string.h>
 
-size_t sw_spw_packet_build(const uint8_t *dest,
-                           size_t dest_len,
-                           const uint8_t *cargo,
-                           size_t cargo_len,
-                           uint8_t *buf,
-                           size_t buf_len)
+sw_status_t sw_spw_packet_build(const uint8_t *dest,
+                                size_t dest_len,
+                                const uint8_t *cargo,
+                                size_t cargo_len,
+                                uint8_t *buf,
+                                size_t buf_len,
+                                size_t *out_len)
 {
-    if (!buf)
+    /* Either part may be empty, but a part with a length must have octets. */
+    if ((!buf) || (!out_len) || ((dest_len > 0) && (!dest)) || ((cargo_len > 0) && (!cargo)))
     {
-        return 0;
+        return SW_INVALID_PARAM;
     }
 
-    if ((dest_len > 0) && (!dest))
+    /* A packet carries at least one data character (clause 5.6.2.1). */
+    if ((dest_len == 0) && (cargo_len == 0))
     {
-        return 0;
-    }
-
-    if ((cargo_len > 0) && (!cargo))
-    {
-        return 0;
+        return SW_WRONG_LENGTH;
     }
 
     /* Compared part by part: dest_len + cargo_len can wrap and pass a size check. */
     if ((dest_len > buf_len) || (cargo_len > (buf_len - dest_len)))
     {
-        return 0;
+        return SW_BUFFER_TOO_SMALL;
     }
 
-    /* An empty packet needs no check of its own: nothing is copied and the result,
-     * 0, is the error value. */
     const size_t total = dest_len + cargo_len;
 
     if (dest_len > 0)
@@ -59,5 +55,7 @@ size_t sw_spw_packet_build(const uint8_t *dest,
         memcpy(&buf[dest_len], cargo, cargo_len);
     }
 
-    return total;
+    *out_len = total;
+
+    return SW_OK;
 }

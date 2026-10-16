@@ -59,18 +59,25 @@ extern "C"
  * ---------------------------------------------------------------------- */
 
 /**
- * @brief Generic success/failure result for functions that report status.
+ * @brief Status returned by every library function that can fail, and by the
+ *        payload adapter hooks.
  *
- * ::SW_OK is zero and every error is negative, so `result < 0` tests for failure.
+ * ::SW_OK is zero and every error is negative, so `status < 0` tests for failure.
+ * Lengths are returned through an `out_len` parameter, never through the status.
+ * On any error, every output of the call is left unchanged.
  */
 typedef enum
 {
-    SW_OK = 0,                /**< Operation succeeded, or a packet was delivered. */
-    SW_ERR = -0x01,           /**< Operation failed, or no packet was delivered. */
-    SW_INVALID_PARAM = -0x02, /**< Invalid parameter */
-    SW_WRONG_ADDRESS = -0x03, /**< Invalid address */
-    SW_WRONG_PORT = -0x04,    /**< Invalid port */
-} sw_result_t;
+    SW_OK = 0,                   /**< Operation succeeded, or a packet was delivered. */
+    SW_INVALID_PARAM = -0x01,    /**< NULL pointer, pointer/length mismatch or bad argument. */
+    SW_BUFFER_TOO_SMALL = -0x02, /**< Output buffer cannot hold the result. */
+    SW_WRONG_ADDRESS = -0x03,    /**< Address outside its range, or unroutable. */
+    SW_WRONG_PORT = -0x04,       /**< Port missing, or not usable for this route. */
+    SW_WRONG_LENGTH = -0x05,     /**< Packet or payload length out of range. */
+    SW_WRONG_PROTOCOL = -0x06,   /**< Protocol Identifier of another protocol. */
+    SW_DISCARDED = -0x07,        /**< Packet discarded by protocol rule; see its status. */
+    SW_PAYLOAD_ERROR = -0x08,    /**< A payload adapter hook failed. */
+} sw_status_t;
 
 /**
  * @brief End-of-packet marker reported by the SpaceWire link layer (clause 5.4.3.2 d, e).
@@ -106,15 +113,6 @@ typedef struct
     uint32_t packets_discarded;                   /**< Packets discarded. */
 } sw_router_t;
 
-/**
- * @brief Result of a routing decision.
- */
-typedef enum
-{
-    SW_ROUTE_OK = 0,     /**< Forward via the returned output port. */
-    SW_ROUTE_DISCARD = 1 /**< Discard: empty packet, non-existent port, or unconfigured address. */
-} sw_route_result_t;
-
 /* -------------------------------------------------------------------------
  * Function Declarations
  * ---------------------------------------------------------------------- */
@@ -134,15 +132,19 @@ typedef enum
  * @param[in]  cargo_len Number of cargo octets.
  * @param[out] buf       Output buffer.
  * @param[in]  buf_len   Buffer capacity in octets.
- * @return Total octets written, or 0 on error (a NULL pointer paired with a
- *         non-zero length, an empty result, or a buffer that is too small).
+ * @param[out] out_len   Total octets written; set only on ::SW_OK.
+ * @return ::SW_OK on success; ::SW_INVALID_PARAM if @p buf or @p out_len is NULL
+ *         or a NULL part has a non-zero length; ::SW_WRONG_LENGTH if both parts
+ *         are empty (a packet has at least one data character, clause 5.6.2.1);
+ *         ::SW_BUFFER_TOO_SMALL if the packet does not fit @p buf_len.
  */
-size_t sw_spw_packet_build(const uint8_t *dest,
-                           size_t dest_len,
-                           const uint8_t *cargo,
-                           size_t cargo_len,
-                           uint8_t *buf,
-                           size_t buf_len);
+sw_status_t sw_spw_packet_build(const uint8_t *dest,
+                                size_t dest_len,
+                                const uint8_t *cargo,
+                                size_t cargo_len,
+                                uint8_t *buf,
+                                size_t buf_len,
+                                size_t *out_len);
 
 /**
  * @brief Initialize a router.
@@ -170,7 +172,7 @@ void sw_router_init(sw_router_t *router, uint8_t num_ports);
  *         reached by path addressing only (clause 5.6.8.3 f), or a port the
  *         router does not have.
  */
-sw_result_t sw_router_add_route(sw_router_t *router,
+sw_status_t sw_router_add_route(sw_router_t *router,
                                 uint8_t logical_addr,
                                 uint8_t output_port,
                                 int delete_addr);
@@ -182,8 +184,8 @@ sw_result_t sw_router_add_route(sw_router_t *router,
  * logical addresses (32..254) are looked up in the routing table and retained
  * unless the entry requests deletion (Table 5-11, clauses 5.6.8.3–5.6.8.6).
  *
- * On ::SW_ROUTE_DISCARD, @p output_port and @p delete_leading are left
- * unchanged.
+ * On any error the packet is discarded, and @p output_port and
+ * @p delete_leading are left unchanged.
  *
  * @param[in,out] router         Router (its counters are updated).
  * @param[in]     packet         Packet octets (the destination address leads).
@@ -191,16 +193,18 @@ sw_result_t sw_router_add_route(sw_router_t *router,
  * @param[out]    output_port    Selected output port.
  * @param[out]    delete_leading 1 if the leading character must be removed before
  *                               forwarding, else 0.
- * @return ::SW_ROUTE_OK to forward, or ::SW_ROUTE_DISCARD to drop the packet
- *         (NULL args, empty packet, non-existent port, unconfigured address, or a
- *         logical address routed to the configuration port). The last three also
- *         bump the router's invalid-address counter (clauses 5.6.8.3 f, 5.6.8.5).
+ * @return ::SW_OK to forward through @p output_port; ::SW_INVALID_PARAM for a NULL
+ *         argument (no counter is touched); ::SW_WRONG_LENGTH for an empty packet
+ *         (clause 5.6.2.1); ::SW_WRONG_ADDRESS for a leading address that names a
+ *         non-existent port, is unconfigured, or is a logical address routed to the
+ *         configuration port, which also bumps the router's invalid-address counter
+ *         (clauses 5.6.8.3 f, 5.6.8.5).
  */
-sw_route_result_t sw_router_route(sw_router_t *router,
-                                  const uint8_t *packet,
-                                  size_t len,
-                                  uint8_t *output_port,
-                                  uint8_t *delete_leading);
+sw_status_t sw_router_route(sw_router_t *router,
+                            const uint8_t *packet,
+                            size_t len,
+                            uint8_t *output_port,
+                            uint8_t *delete_leading);
 
 #ifdef __cplusplus
 }

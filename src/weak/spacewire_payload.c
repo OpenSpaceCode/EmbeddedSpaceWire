@@ -34,31 +34,41 @@ SW_WEAK uint32_t sw_payload_size(const void *payload)
     return raw->len;
 }
 
-SW_WEAK uint32_t sw_payload_serialize(const void *payload, uint8_t *buf, uint32_t buf_len)
+SW_WEAK sw_status_t sw_payload_serialize(const void *payload, uint8_t *buf, uint32_t buf_len)
 {
     const sw_payload_raw_t *raw = payload;
 
-    if ((!raw) || (!raw->data) || (!buf) || (raw->len == 0u) || (buf_len < raw->len))
+    if ((!raw) || (!raw->data) || (!buf))
     {
-        return 0;
+        return SW_INVALID_PARAM;
+    }
+
+    if (raw->len == 0u)
+    {
+        return SW_WRONG_LENGTH;
+    }
+
+    if (buf_len < raw->len)
+    {
+        return SW_BUFFER_TOO_SMALL;
     }
 
     memcpy(buf, raw->data, raw->len);
 
-    return raw->len;
+    return SW_OK;
 }
 
-SW_WEAK int sw_payload_parse(void *payload, const uint8_t *buf, uint32_t buf_len)
+SW_WEAK sw_status_t sw_payload_parse(void *payload, const uint8_t *buf, uint32_t buf_len)
 {
     sw_payload_raw_t *raw = payload;
 
     if ((!raw) || (!buf))
     {
-        return 0;
+        return SW_INVALID_PARAM;
     }
 
     raw->data = buf;
     raw->len = buf_len;
 
-    return 1;
+    return SW_OK;
 }

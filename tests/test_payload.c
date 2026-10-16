@@ -45,11 +45,11 @@ static int test_payload_serialize_exact_buffer(void)
     }
     memset(buf, FILL, sizeof(sample));
 
-    const uint32_t n = sw_payload_serialize(&raw, buf, sizeof(sample));
+    const sw_status_t status = sw_payload_serialize(&raw, buf, sizeof(sample));
     const int copied = (memcmp(buf, sample, sizeof(sample)) == 0);
     free(buf);
 
-    ASSERT_EQ_INT(5, n);
+    ASSERT_EQ_INT(SW_OK, status);
     ASSERT_TRUE(copied);
     return 0;
 }
@@ -65,11 +65,11 @@ static int test_payload_serialize_short_buffer_unchanged(void)
     }
     memset(one_short, FILL, sizeof(untouched));
 
-    const uint32_t n = sw_payload_serialize(&raw, one_short, sizeof(untouched));
+    const sw_status_t status = sw_payload_serialize(&raw, one_short, sizeof(untouched));
     const int unchanged = (memcmp(one_short, untouched, sizeof(untouched)) == 0);
     free(one_short);
 
-    ASSERT_EQ_INT(0, n);
+    ASSERT_EQ_INT(SW_BUFFER_TOO_SMALL, status);
     ASSERT_TRUE(unchanged);
     return 0;
 }
@@ -82,10 +82,10 @@ static int test_payload_serialize_invalid_args_unchanged(void)
     const uint8_t untouched[5] = {FILL, FILL, FILL, FILL, FILL};
     uint8_t buf[5] = {FILL, FILL, FILL, FILL, FILL};
 
-    ASSERT_EQ_INT(0, sw_payload_serialize(NULL, buf, sizeof(buf)));
-    ASSERT_EQ_INT(0, sw_payload_serialize(&no_data, buf, sizeof(buf)));
-    ASSERT_EQ_INT(0, sw_payload_serialize(&empty, buf, sizeof(buf)));
-    ASSERT_EQ_INT(0, sw_payload_serialize(&raw, NULL, sizeof(buf)));
+    ASSERT_EQ_INT(SW_INVALID_PARAM, sw_payload_serialize(NULL, buf, sizeof(buf)));
+    ASSERT_EQ_INT(SW_INVALID_PARAM, sw_payload_serialize(&no_data, buf, sizeof(buf)));
+    ASSERT_EQ_INT(SW_INVALID_PARAM, sw_payload_serialize(&raw, NULL, sizeof(buf)));
+    ASSERT_EQ_INT(SW_WRONG_LENGTH, sw_payload_serialize(&empty, buf, sizeof(buf)));
     ASSERT_EQ_MEM(buf, untouched, sizeof(untouched));
     return 0;
 }
@@ -94,15 +94,15 @@ static int test_payload_parse_zero_copy(void)
 {
     sw_payload_raw_t raw = {.data = NULL, .len = 0};
 
-    ASSERT_EQ_INT(1, sw_payload_parse(&raw, sample, sizeof(sample)));
+    ASSERT_EQ_INT(SW_OK, sw_payload_parse(&raw, sample, sizeof(sample)));
     ASSERT_TRUE(raw.data == sample);
     ASSERT_EQ_INT(5, raw.len);
 
-    ASSERT_EQ_INT(1, sw_payload_parse(&raw, sample, 1));
+    ASSERT_EQ_INT(SW_OK, sw_payload_parse(&raw, sample, 1));
     ASSERT_EQ_INT(1, raw.len);
 
     /* An empty carried packet is still delivered (ECSS-E-ST-50-53C clause 5.5.4.2 a). */
-    ASSERT_EQ_INT(1, sw_payload_parse(&raw, sample, 0));
+    ASSERT_EQ_INT(SW_OK, sw_payload_parse(&raw, sample, 0));
     ASSERT_TRUE(raw.data == sample);
     ASSERT_EQ_INT(0, raw.len);
     return 0;
@@ -113,8 +113,8 @@ static int test_payload_parse_failure_unchanged(void)
     const uint8_t other[1] = {0};
     sw_payload_raw_t raw = {.data = other, .len = sizeof(other)};
 
-    ASSERT_EQ_INT(0, sw_payload_parse(NULL, sample, sizeof(sample)));
-    ASSERT_EQ_INT(0, sw_payload_parse(&raw, NULL, sizeof(sample)));
+    ASSERT_EQ_INT(SW_INVALID_PARAM, sw_payload_parse(NULL, sample, sizeof(sample)));
+    ASSERT_EQ_INT(SW_INVALID_PARAM, sw_payload_parse(&raw, NULL, sizeof(sample)));
     ASSERT_TRUE(raw.data == other);
     ASSERT_EQ_INT(1, raw.len);
     return 0;

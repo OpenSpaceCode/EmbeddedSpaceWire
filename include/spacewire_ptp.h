@@ -66,19 +66,15 @@ extern "C"
 /**
  * @brief Receive status reported to the target user application (clauses 5.1.3, 5.2.3.2).
  *
- * The first three values are the status codes defined by the standard.
- * ::SW_PTP_STATUS_INVALID is not one of them (clauses 5.1.3 b, 5.2.3.2 c allow only
- * 0x00..0x02); it is an implementation sentinel for input that is not delivered for
- * other reasons: NULL arguments, an end marker that is neither EOP nor EEP, fewer
- * octets than the encapsulation header, a Protocol Identifier other than 0x02 (not a
- * CCSDS PTP packet, clause 5.5.4.1), or sw_payload_parse() failing.
+ * Exactly the three status codes the standard defines (clauses 5.1.3 b, 5.2.3.2 c).
+ * Input that is not delivered for any other reason is reported through the
+ * ::sw_status_t returned by sw_ptp_decode(), not through this value.
  */
 typedef enum
 {
-    SW_PTP_STATUS_OK = 0x00,               /**< Packet arrived with no known error. */
-    SW_PTP_STATUS_EEP = 0x01,              /**< Packet terminated by EEP. */
-    SW_PTP_STATUS_RESERVED_NONZERO = 0x02, /**< Reserved field was non-zero. */
-    SW_PTP_STATUS_INVALID = 0xFF           /**< Not a CCSDS PTP packet / malformed. */
+    SW_PTP_STATUS_OK = 0x00,              /**< Packet arrived with no known error. */
+    SW_PTP_STATUS_EEP = 0x01,             /**< Packet terminated by EEP. */
+    SW_PTP_STATUS_RESERVED_NONZERO = 0x02 /**< Reserved field was non-zero. */
 } sw_ptp_status_t;
 
 /**
@@ -129,7 +125,7 @@ typedef struct
 {
     uint32_t packets_sent;      /**< Successfully encoded packets. */
     uint32_t packets_received;  /**< Successfully decoded packets. */
-    uint32_t packets_discarded; /**< Discarded (EEP / Reserved!=0 / bad ID / malformed). */
+    uint32_t packets_discarded; /**< Received but not delivered (any decode error but NULL). */
     uint32_t bytes_sent;        /**< Total octets emitted by sw_ptp_encode(). */
     uint32_t bytes_received;    /**< Total octets consumed by successful decode. */
 } sw_ptp_statistics_t;
@@ -166,27 +162,31 @@ static inline sw_ptp_virtual_channel_t sw_ptp_get_virtual_channel(const sw_ptp_f
 /**
  * @brief Encode a complete CCSDS PTP packet into a buffer.
  *
- * Writes the optional Target SpaceWire Address, the 4-octet encapsulation header and the
- * carried packet, which is sized by sw_payload_size() and serialised by
+ * Writes the optional Target SpaceWire Address, the 4-octet encapsulation header
+ * and the carried packet, which is sized by sw_payload_size() and serialised by
  * sw_payload_serialize(). No checksum and no in-band EOP are added.
  *
- * On failure, @p buf is left unchanged, provided sw_payload_serialize() honours
- * its own contract.
+ * On failure, @p buf and @p out_len are left unchanged, provided
+ * sw_payload_serialize() honours its own contract.
  *
  * @param[in]  pf      Packet frame to encode.
  * @param[in]  payload Payload object handed to the payload adapter hooks; with
  *                     the default hooks, a ::sw_payload_raw_t.
  * @param[out] buf     Output buffer.
  * @param[in]  buf_len Buffer capacity in octets.
- * @return Octets written, or 0 on error (NULL args, Target Logical Address outside
- *         32..254, a Target SpaceWire Address octet of 255, carried packet outside
- *         ::SW_PTP_CCSDS_MIN_LEN to ::SW_PTP_CCSDS_MAX_LEN octets, buffer too small,
- *         or a failing payload hook).
+ * @param[out] out_len Octets written; set only on ::SW_OK.
+ * @return ::SW_OK on success; ::SW_INVALID_PARAM for a NULL argument or a NULL
+ *         path with a non-zero length; ::SW_WRONG_ADDRESS for a Target Logical
+ *         Address outside 32..254 or a Target SpaceWire Address octet of 255;
+ *         ::SW_WRONG_LENGTH for a carried packet outside ::SW_PTP_CCSDS_MIN_LEN to
+ *         ::SW_PTP_CCSDS_MAX_LEN octets (clauses 5.1.2 a, 5.5.2 c);
+ *         ::SW_BUFFER_TOO_SMALL; or ::SW_PAYLOAD_ERROR if sw_payload_serialize() fails.
  */
-uint32_t sw_ptp_encode(const sw_ptp_frame_t *pf,
-                       const void *payload,
-                       uint8_t *buf,
-                       uint32_t buf_len);
+sw_status_t sw_ptp_encode(const sw_ptp_frame_t *pf,
+                          const void *payload,
+                          uint8_t *buf,
+                          uint32_t buf_len,
+                          uint32_t *out_len);
 
 /**
  * @brief Decode a received CCSDS PTP packet.
@@ -203,9 +203,8 @@ uint32_t sw_ptp_encode(const sw_ptp_frame_t *pf,
  * (clauses 4.3, 5.5.4.2 a); the send-side bounds of clause 5.1.2 are not
  * applied here.
  *
- * On failure, @p pf and @p payload are left unchanged; only @p status is
- * written. A discarded packet is thereby "null" in the sense of clause
- * 5.2.3.2 b: nothing is delivered.
+ * On failure, @p pf and @p payload are left unchanged. A discarded packet is
+ * thereby "null" in the sense of clause 5.2.3.2 b: nothing is delivered.
  *
  * @param[out] pf      Decoded Target Logical Address and User Application value.
  * @param[out] payload Payload object filled by sw_payload_parse(); with the
@@ -215,17 +214,21 @@ uint32_t sw_ptp_encode(const sw_ptp_frame_t *pf,
  * @param[in]  end     End-of-packet marker reported by the link layer. Only
  *                     ::SW_END_EOP can deliver a packet; any value other than
  *                     ::SW_END_EOP or ::SW_END_EEP is treated as invalid.
- * @param[out] status  Receive status (clause 5.1.3); may be NULL. Set to
- *                      ::SW_PTP_STATUS_OK on delivery, ::SW_PTP_STATUS_EEP or
- *                      ::SW_PTP_STATUS_RESERVED_NONZERO on a recognised discard,
- *                      or ::SW_PTP_STATUS_INVALID for NULL args, an unknown
- *                      end marker, fewer than
- *                      ::SW_PTP_HEADER_LEN octets, a bad Protocol Identifier, or
- *                      a failing sw_payload_parse().
- * @return ::SW_OK if a valid packet is delivered, ::SW_ERR if it is discarded,
- *         or ::SW_INVALID_PARAM if @p pf, @p payload or @p buf is NULL.
+ * @param[out] status  Receive status for the target user application (clause
+ *                     5.1.3); may be NULL. Written only when the return value is
+ *                     ::SW_OK (::SW_PTP_STATUS_OK) or ::SW_DISCARDED
+ *                     (::SW_PTP_STATUS_EEP or ::SW_PTP_STATUS_RESERVED_NONZERO);
+ *                     left unchanged otherwise.
+ * @return ::SW_OK if the packet is delivered; ::SW_DISCARDED for a discard the
+ *         standard defines (EEP, clause 5.5.4.4; non-zero Reserved field, clause
+ *         5.5.4.3); ::SW_INVALID_PARAM if @p pf, @p payload or @p buf is NULL or
+ *         @p end is neither EOP nor EEP; ::SW_WRONG_LENGTH for fewer than
+ *         ::SW_PTP_HEADER_LEN octets; ::SW_WRONG_PROTOCOL for a Protocol
+ *         Identifier other than 0x02 (clause 5.5.4.1); or ::SW_PAYLOAD_ERROR if
+ *         sw_payload_parse() fails. Every error except a NULL argument counts as a
+ *         discarded packet in the statistics.
  */
-sw_result_t sw_ptp_decode(sw_ptp_frame_t *pf,
+sw_status_t sw_ptp_decode(sw_ptp_frame_t *pf,
                           void *payload,
                           const uint8_t *buf,
                           uint32_t buf_len,
@@ -235,21 +238,23 @@ sw_result_t sw_ptp_decode(sw_ptp_frame_t *pf,
 /**
  * @brief Build a complete CCSDS PTP packet using logical addressing only.
  *
- * Convenience wrapper around sw_ptp_encode() for a frame without a path
- * address. On failure, @p buf is left unchanged.
+ * Convenience wrapper around sw_ptp_encode() for a frame without a Target
+ * SpaceWire Address. On failure, @p buf and @p out_len are left unchanged.
  *
  * @param[in]  logical_addr Target Logical Address.
  * @param[in]  user_app     User Application value.
  * @param[in]  payload      Payload object handed to the payload adapter hooks.
  * @param[out] buf          Output buffer.
  * @param[in]  buf_len      Buffer capacity in octets.
- * @return Octets written, or 0 on error (see sw_ptp_encode()).
+ * @param[out] out_len      Octets written; set only on ::SW_OK.
+ * @return As sw_ptp_encode().
  */
-uint32_t sw_ptp_create(uint8_t logical_addr,
-                       uint8_t user_app,
-                       const void *payload,
-                       uint8_t *buf,
-                       uint32_t buf_len);
+sw_status_t sw_ptp_create(uint8_t logical_addr,
+                          uint8_t user_app,
+                          const void *payload,
+                          uint8_t *buf,
+                          uint32_t buf_len,
+                          uint32_t *out_len);
 
 /**
  * @brief Copy the current statistics.

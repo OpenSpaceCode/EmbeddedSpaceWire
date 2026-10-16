@@ -66,23 +66,24 @@ uint32_t sw_payload_size(const void *payload)
     return (uint32_t)pkt->body_len + TOY_PREFIX_LEN;
 }
 
-uint32_t sw_payload_serialize(const void *payload, uint8_t *buf, uint32_t buf_len)
+sw_status_t sw_payload_serialize(const void *payload, uint8_t *buf, uint32_t buf_len)
 {
     const toy_packet_t *pkt = payload;
     const uint32_t need = (uint32_t)pkt->body_len + TOY_PREFIX_LEN;
 
+    /* A hook-specific code: the library must still report SW_PAYLOAD_ERROR. */
     if ((g_fail_serialize) || (buf_len < need))
     {
-        return 0;
+        return SW_BUFFER_TOO_SMALL;
     }
 
     buf[0] = (uint8_t)need;
     memcpy(&buf[TOY_PREFIX_LEN], pkt->body, pkt->body_len);
 
-    return need;
+    return SW_OK;
 }
 
-int sw_payload_parse(void *payload, const uint8_t *buf, uint32_t buf_len)
+sw_status_t sw_payload_parse(void *payload, const uint8_t *buf, uint32_t buf_len)
 {
     toy_packet_t *pkt = payload;
 
@@ -90,22 +91,22 @@ int sw_payload_parse(void *payload, const uint8_t *buf, uint32_t buf_len)
     if ((g_fail_parse) || (buf_len < TOY_PREFIX_LEN) || (buf[0] < TOY_PREFIX_LEN) ||
         (buf[0] > buf_len))
     {
-        return 0;
+        return SW_WRONG_LENGTH;
     }
 
     pkt->body = &buf[TOY_PREFIX_LEN];
     pkt->body_len = (uint8_t)(buf[0] - TOY_PREFIX_LEN);
 
-    return 1;
+    return SW_OK;
 }
 
 /**
- * @brief Decode a buffer that must be discarded as invalid and check nothing was delivered.
+ * @brief Decode a buffer the parse hook must refuse, and check nothing was delivered.
  *
  * @param[in] buf     Received buffer.
  * @param[in] buf_len Buffer length in octets.
- * @return 0 if the packet was discarded with ::SW_PTP_STATUS_INVALID and both
- *         the frame and the payload object were left unchanged, 1 otherwise.
+ * @return 0 if the decode returned ::SW_PAYLOAD_ERROR and left the frame, the
+ *         payload object and the receive status unchanged, 1 otherwise.
  */
 static int expect_invalid(const uint8_t *buf, uint32_t buf_len)
 {
@@ -118,9 +119,9 @@ static int expect_invalid(const uint8_t *buf, uint32_t buf_len)
     memcpy(&pf_before, &pf, sizeof(pf));
     memcpy(&pkt_before, &pkt, sizeof(pkt));
 
-    sw_ptp_status_t status = SW_PTP_STATUS_OK;
-    ASSERT_EQ_INT(SW_ERR, sw_ptp_decode(&pf, &pkt, buf, buf_len, SW_END_EOP, &status));
-    ASSERT_EQ_INT(SW_PTP_STATUS_INVALID, status);
+    sw_ptp_status_t status = (sw_ptp_status_t)FILL;
+    ASSERT_EQ_INT(SW_PAYLOAD_ERROR, sw_ptp_decode(&pf, &pkt, buf, buf_len, SW_END_EOP, &status));
+    ASSERT_EQ_INT(FILL, status);
     ASSERT_EQ_MEM(&pf, &pf_before, sizeof(pf));
     ASSERT_EQ_MEM(&pkt, &pkt_before, sizeof(pkt));
     return 0;
@@ -137,8 +138,9 @@ static uint8_t *alloc_toy_wire(uint32_t wire_len)
 {
     uint8_t encoded[TOY_WIRE_LEN];
     uint8_t *wire = (uint8_t *)calloc(wire_len, 1);
+    uint32_t n = 0;
 
-    if ((wire) && (sw_ptp_encode(&toy_frame, &toy_packet, encoded, sizeof(encoded)) != 0u))
+    if ((wire) && (sw_ptp_encode(&toy_frame, &toy_packet, encoded, sizeof(encoded), &n) == SW_OK))
     {
         memcpy(wire, encoded, (wire_len < TOY_WIRE_LEN) ? wire_len : TOY_WIRE_LEN);
     }
@@ -157,7 +159,7 @@ static int test_override_replaces_defaults(void)
 
     sw_ptp_frame_t pf;
     toy_packet_t pkt = {.body = NULL, .body_len = 0};
-    const sw_result_t result = sw_ptp_decode(&pf, &pkt, wire, TOY_WIRE_LEN, SW_END_EOP, NULL);
+    const sw_status_t result = sw_ptp_decode(&pf, &pkt, wire, TOY_WIRE_LEN, SW_END_EOP, NULL);
     const uint8_t prefix = wire[SW_PTP_HEADER_LEN];
     const int zero_copy = (pkt.body == &wire[SW_PTP_HEADER_LEN + TOY_PREFIX_LEN]);
     const int same_body =
@@ -184,7 +186,7 @@ static int test_override_trailing_octet_reaches_hook(void)
 
     sw_ptp_frame_t pf;
     toy_packet_t pkt = {.body = NULL, .body_len = 0};
-    const sw_result_t result = sw_ptp_decode(&pf, &pkt, wire, TOY_WIRE_LEN + 1u, SW_END_EOP, NULL);
+    const sw_status_t result = sw_ptp_decode(&pf, &pkt, wire, TOY_WIRE_LEN + 1u, SW_END_EOP, NULL);
     free(wire);
 
     ASSERT_EQ_INT(SW_OK, result);
@@ -241,11 +243,13 @@ static int test_override_serialize_failure_leaves_buffer_unchanged(void)
 
     sw_ptp_reset_statistics();
     g_fail_serialize = 1;
-    const uint32_t n = sw_ptp_encode(&toy_frame, &toy_packet, wire, sizeof(wire));
+    uint32_t n = UINT32_MAX;
+    const sw_status_t status = sw_ptp_encode(&toy_frame, &toy_packet, wire, sizeof(wire), &n);
     g_fail_serialize = 0;
     sw_ptp_get_statistics(&stats);
 
-    ASSERT_EQ_INT(0, n);
+    ASSERT_EQ_INT(SW_PAYLOAD_ERROR, status);
+    ASSERT_EQ_UINT(UINT32_MAX, n);
     ASSERT_EQ_MEM(wire, untouched, sizeof(wire));
     ASSERT_EQ_INT(0, stats.packets_sent);
     return 0;
