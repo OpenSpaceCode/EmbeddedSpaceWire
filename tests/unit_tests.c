@@ -1,11 +1,20 @@
 /**
- * @file unit_tests.c
- * @brief Unit-test entry point: runs each suite and reports totals.
+ * @file    unit_tests.c
+ * @brief   Unit-test entry point: runs each suite and reports totals
+ *
+ * Covers the default payload hooks; the overridden hooks are tested by the
+ * separate binary built from test_payload_override.c.
+ *
+ * Copyright 2026 OpenSpaceCode contributors
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * OpenSpaceCode — https://github.com/OpenSpaceCode
  */
 #include "test_runners.h"
 
 #include <stdio.h>
 
+/** @brief Print one suite's pass count under a label. */
 #define REPORT(label, r) printf("  %-14s Passed %d/%d\n\n", label ":", (r).passed, (r).total)
 
 int main(void)
@@ -24,8 +33,13 @@ int main(void)
     total_passed += r.passed;
     total_tests += r.total;
 
-    r = test_spacewire_packet_run_all();
-    REPORT("packet", r);
+    r = test_spacewire_ptp_run_all();
+    REPORT("ptp", r);
+    total_passed += r.passed;
+    total_tests += r.total;
+
+    r = test_spacewire_payload_run_all();
+    REPORT("payload", r);
     total_passed += r.passed;
     total_tests += r.total;
 

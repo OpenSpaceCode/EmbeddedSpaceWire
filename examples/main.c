@@ -1,179 +1,220 @@
 /**
- * @file main.c
- * @brief EmbeddedSpaceWire example — SpaceWire packets, routing and CCSDS packet transfer.
+ * @file    main.c
+ * @brief   EmbeddedSpaceWire example: SpaceWire packets, packet transfer and routing
  *
- * The character/signal and link levels are handled by the SpaceWire hardware
- * CODEC; this example exercises the packet and network layers in software.
+ * Exercises the packet and network layers in software, using the default
+ * payload hooks, so the carried packet is raw octets. The character/signal and
+ * link levels are handled by the SpaceWire hardware CODEC.
+ * See also: docs/space_packet_integration.md
+ *
+ * Copyright 2026 OpenSpaceCode contributors
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * OpenSpaceCode — https://github.com/OpenSpaceCode
  */
 
 #include "spacewire.h"
-#include "spacewire_packet.h"
+#include "spacewire_payload.h"
+#include "spacewire_ptp.h"
 
+#include <inttypes.h>
 #include <stdio.h>
-#include <string.h>
 
-int main(void)
+/**
+ * @brief Print a labelled buffer as hex octets on one line.
+ *
+ * @param[in] label Text printed before the octets.
+ * @param[in] buf   Octets to print.
+ * @param[in] len   Number of octets.
+ */
+static void example_print_hex(const char *label, const uint8_t *buf, size_t len)
 {
-    printf("===============================================\n");
-    printf("SpaceWire packet + network layer - Example\n");
-    printf("===============================================\n\n");
-
-    /* ========== SPACEWIRE PACKET (LOGICAL ADDRESSING) ========== */
-    printf("[1] SpaceWire Packet Test\n");
-    printf("    Building a logical-addressed packet (no CRC; EOP added by link)\n");
-
-    const uint8_t cargo_data[] = {0x01, 0x02, 0x03, 0x04, 0x05};
-    const uint8_t logical_dest[] = {0x40}; /* logical address 64 */
-
-    uint8_t spw_buf[256];
-    size_t spw_len = sw_spw_packet_build(logical_dest,
-                                         sizeof(logical_dest),
-                                         cargo_data,
-                                         sizeof(cargo_data),
-                                         spw_buf,
-                                         sizeof(spw_buf));
-    printf("    Packet size: %zu bytes\n", spw_len);
-    printf("    Packet data (hex): ");
-    for (size_t i = 0; i < spw_len; i++)
+    printf("    %-18s", label);
+    for (size_t i = 0; i < len; i++)
     {
-        printf("%02X ", spw_buf[i]);
+        printf(" %02X", buf[i]);
     }
-    printf("\n    ✓ Packet build working\n\n");
+    printf("\n");
+}
 
-    /* ========== SPACEWIRE PACKET (PATH ADDRESSING) ========== */
-    printf("[2] SpaceWire Path Addressing Test\n");
-    printf("    Building a multi-hop path-addressed packet\n");
+/**
+ * @brief Build a logical-addressed and a path-addressed SpaceWire packet
+ *        (ECSS-E-ST-50-12C clause 5.6.2).
+ *
+ * @return 0 on success, 1 on failure.
+ */
+static int example_spw_packets(void)
+{
+    static const uint8_t cargo[] = {0x01, 0x02, 0x03, 0x04, 0x05};
+    static const uint8_t logical_dest[] = {0x40};
+    static const uint8_t path_dest[] = {2, 1, 3}; /* leave by port 2, then 1, then 3 */
+    uint8_t buf[16];
 
-    const uint8_t path_dest[] = {2, 1, 3}; /* take port 2, then 1, then 3 */
-    uint8_t path_buf[256];
-    size_t path_len = sw_spw_packet_build(path_dest,
-                                          sizeof(path_dest),
-                                          cargo_data,
-                                          sizeof(cargo_data),
-                                          path_buf,
-                                          sizeof(path_buf));
-    printf("    Path address: %u hops, packet %zu bytes\n", (unsigned)sizeof(path_dest), path_len);
-    printf("    Packet data (hex): ");
-    for (size_t i = 0; i < path_len; i++)
+    printf("[1] SpaceWire packets (no CRC; the link appends EOP)\n");
+
+    size_t len = 0;
+    if (sw_spw_packet_build(logical_dest,
+                            sizeof(logical_dest),
+                            cargo,
+                            sizeof(cargo),
+                            buf,
+                            sizeof(buf),
+                            &len) != SW_OK)
     {
-        printf("%02X ", path_buf[i]);
+        return 1;
     }
-    printf("\n    ✓ Path-addressed packet built\n\n");
+    example_print_hex("logical-addressed:", buf, len);
 
-    /* ========== CCSDS PACKET + SPACEWIRE INTEGRATION ========== */
-    printf("[3] CCSDS Packet Transfer Protocol\n");
-    printf("    Encapsulating a CCSDS packet (ECSS-E-ST-50-53C)\n");
-
-    sw_packet_config_t pkt_config = {.path = NULL,
-                                     .path_len = 0,
-                                     .logical_addr = SW_PTP_LOGICAL_ADDR_DEFAULT,
-                                     .user_app = 0x00};
-
-    sw_packet_frame_t pf;
-    sw_packet_init(&pf, &pkt_config);
-
-    /* Set CCSDS packet fields */
-    pf.packet.ph.apid = 0x0042; /* APID = 0x0042 */
-    pf.packet.ph.seq_count = 1;
-    const char *msg = "Hello Space Wire";
-    pf.packet.data = (const uint8_t *)msg;
-    pf.packet.data_len = (uint16_t)strlen(msg);
-
-    uint8_t pkt_buf[512];
-    size_t pkt_size = sw_packet_encode(&pf, pkt_buf, sizeof(pkt_buf));
-    if (pkt_size > 0)
+    if (sw_spw_packet_build(path_dest,
+                            sizeof(path_dest),
+                            cargo,
+                            sizeof(cargo),
+                            buf,
+                            sizeof(buf),
+                            &len) != SW_OK)
     {
-        printf("    Packet frame size: %zu bytes\n", pkt_size);
-        printf("    APID: 0x%04X\n", pf.packet.ph.apid);
-        printf("    Payload: \"%s\"\n", msg);
-        printf("    ✓ Packet frame created\n\n");
+        return 1;
     }
+    example_print_hex("path-addressed:", buf, len);
 
-    /* ========== PACKET DECODING EXAMPLE ========== */
-    printf("[4] Packet Decoding Test\n");
-    printf("    Extracting the CCSDS packet at the target\n");
+    return 0;
+}
 
-    sw_packet_frame_t decoded_pf;
+/**
+ * @brief Encapsulate a carried packet and extract it again (ECSS-E-ST-50-53C).
+ *
+ * @return 0 on success, 1 on failure.
+ */
+static int example_packet_transfer(void)
+{
+    /* With the default payload hooks the carried packet is raw octets: here a
+     * ready-made CCSDS Space Packet (TM, APID 0x042, 4 data octets). */
+    static const uint8_t space_packet[] =
+        {0x00, 0x42, 0xC0, 0x01, 0x00, 0x03, 0xDE, 0xAD, 0xBE, 0xEF};
+    const sw_payload_raw_t payload = {.data = space_packet, .len = sizeof(space_packet)};
+    const sw_ptp_frame_t frame = {.path = NULL,
+                                  .path_len = 0,
+                                  .logical_addr = SW_PTP_LOGICAL_ADDR_DEFAULT,
+                                  .user_app = 0x00};
+    uint8_t buf[32];
+
+    printf("[2] CCSDS Packet Transfer Protocol\n");
+
+    uint32_t len = 0;
+    if (sw_ptp_encode(&frame, &payload, buf, sizeof(buf), &len) != SW_OK)
+    {
+        return 1;
+    }
+    example_print_hex("encoded:", buf, len);
+
+    sw_ptp_frame_t received;
+    sw_payload_raw_t carried;
     sw_ptp_status_t status;
-    if (sw_packet_decode(&decoded_pf, pkt_buf, pkt_size, SW_END_EOP, &status) == SW_OK)
+    if (sw_ptp_decode(&received, &carried, buf, len, SW_END_EOP, &status) != SW_OK)
     {
-        printf("    Decoded APID: 0x%04X\n", decoded_pf.packet.ph.apid);
-        printf("    Decoded user application: 0x%02X\n", decoded_pf.user_app);
-        printf("    Decoded payload length: %u bytes\n", decoded_pf.packet.data_len);
-        printf("    Decoded payload: \"%.*s\"\n",
-               decoded_pf.packet.data_len,
-               (const char *)decoded_pf.packet.data);
-        printf("    Status: %u (0 = OK)\n", (unsigned)status);
-        printf("    ✓ Packet decoding successful\n\n");
+        return 1;
+    }
+    printf("    decoded: logical address 0x%02X, user application 0x%02X, status %u\n",
+           received.logical_addr,
+           received.user_app,
+           (unsigned)status);
+    example_print_hex("carried packet:", carried.data, carried.len);
+
+    return 0;
+}
+
+/**
+ * @brief Route one packet and print the decision.
+ *
+ * @param[in,out] router   Router to ask.
+ * @param[in]     packet   Packet octets; the destination address leads.
+ * @param[in]     len      Packet length in octets.
+ * @param[in]     expected Status the example expects.
+ * @return 0 if the router decided as expected, 1 otherwise.
+ */
+static int example_route_one(sw_router_t *router,
+                             const uint8_t *packet,
+                             size_t len,
+                             sw_status_t expected)
+{
+    uint8_t port = 0;
+    uint8_t delete_leading = 0;
+    const sw_status_t result = sw_router_route(router, packet, len, &port, &delete_leading);
+
+    if (result == SW_OK)
+    {
+        printf("    leading 0x%02X -> port %u (delete leading: %u)\n",
+               packet[0],
+               port,
+               delete_leading);
     }
     else
     {
-        printf("    ✗ Packet decoding failed\n\n");
+        printf("    leading 0x%02X -> discarded (status %d)\n", packet[0], (int)result);
     }
 
-    /* ========== ROUTER EXAMPLE ========== */
-    printf("[5] Router Configuration Test\n");
-    printf("    Setting up a routing table (port 0 = configuration port)\n");
+    return (result == expected) ? 0 : 1;
+}
 
+/**
+ * @brief Configure a routing switch and route three packets
+ *        (ECSS-E-ST-50-12C clause 5.6.8).
+ *
+ * @return 0 on success, 1 on failure.
+ */
+static int example_routing(void)
+{
+    static const uint8_t logical_pkt[] = {0x40, 0xAA, 0xBB};
+    static const uint8_t path_pkt[] = {2, 0xAA, 0xBB};
+    static const uint8_t unknown_pkt[] = {0x77, 0xAA};
     sw_router_t router;
-    sw_router_init(&router, 4); /* ports 0..3 (port 0 = configuration port) */
+    int failures = 0;
 
-    sw_router_add_route(&router, 0x40, 1, 0); /* logical 0x40 -> port 1, retain */
-    sw_router_add_route(&router, 0x41, 2, 1); /* logical 0x41 -> port 2, delete */
+    printf("[3] Routing (port 0 is the configuration port)\n");
 
-    printf("    Number of ports: %u\n", router.num_ports);
-    printf("    Routing table configured:\n");
-    printf("      logical 0x40 -> port 1 (address retained)\n");
-    printf("      logical 0x41 -> port 2 (address deleted)\n");
-    printf("    ✓ Router initialized\n\n");
-
-    /* ========== ROUTING EXAMPLE ========== */
-    printf("[6] Packet Routing Test\n");
-    printf("    Routing by leading destination-address character\n");
-
-    uint8_t out_port = 0;
-    uint8_t delete_leading = 0;
-
-    /* Logical addressing: leading char 0x40 is looked up in the routing table. */
-    const uint8_t logical_pkt[] = {0x40, 0xAA, 0xBB};
-    if (sw_router_route(&router, logical_pkt, sizeof(logical_pkt), &out_port, &delete_leading) ==
-        SW_ROUTE_OK)
+    sw_router_init(&router, 4);
+    if ((sw_router_add_route(&router, 0x40, 1, 0) != SW_OK) ||
+        (sw_router_add_route(&router, 0x41, 2, 1) != SW_OK))
     {
-        printf("    logical 0x40 -> port %u (delete leading: %u)\n", out_port, delete_leading);
+        return 1;
     }
 
-    /* Path addressing: leading char 2 selects port 2 directly and is deleted. */
-    const uint8_t path_pkt[] = {2, 0xAA, 0xBB};
-    if (sw_router_route(&router, path_pkt, sizeof(path_pkt), &out_port, &delete_leading) ==
-        SW_ROUTE_OK)
-    {
-        printf("    path 2 -> port %u (delete leading: %u)\n", out_port, delete_leading);
-    }
+    failures += example_route_one(&router, logical_pkt, sizeof(logical_pkt), SW_OK);
+    failures += example_route_one(&router, path_pkt, sizeof(path_pkt), SW_OK);
+    failures += example_route_one(&router, unknown_pkt, sizeof(unknown_pkt), SW_WRONG_ADDRESS);
+    printf("    invalid-address errors: %" PRIu32 "\n", router.invalid_address_errors);
 
-    /* An unconfigured logical address is discarded with an invalid-address error. */
-    const uint8_t bad_pkt[] = {0x77, 0xAA};
-    if (sw_router_route(&router, bad_pkt, sizeof(bad_pkt), &out_port, &delete_leading) ==
-        SW_ROUTE_DISCARD)
-    {
-        printf("    logical 0x77 -> DISCARD (invalid-address errors: %u)\n",
-               router.invalid_address_errors);
-    }
-    printf("    ✓ Routing successful\n\n");
+    return (failures == 0) ? 0 : 1;
+}
 
-    /* ========== STATISTICS ========== */
-    printf("[7] Statistics\n");
-    sw_statistics_t stats;
-    sw_get_statistics(&stats);
-    printf("    Packets sent: %u\n", stats.packets_sent);
-    printf("    Packets received: %u\n", stats.packets_received);
-    printf("    Bytes sent: %u\n", stats.bytes_sent);
-    printf("    Bytes received: %u\n", stats.bytes_received);
-    printf("    Packets discarded: %u\n", stats.packets_discarded);
-    printf("    ✓ Statistics available\n\n");
+/**
+ * @brief Print the packet transfer counters gathered by the steps above.
+ */
+static void example_statistics(void)
+{
+    sw_ptp_statistics_t stats;
 
-    printf("===============================================\n");
-    printf("All tests completed successfully!\n");
-    printf("===============================================\n");
+    sw_ptp_get_statistics(&stats);
+    printf("[4] Statistics\n");
+    printf("    packets sent/received/discarded: %" PRIu32 "/%" PRIu32 "/%" PRIu32 "\n",
+           stats.packets_sent,
+           stats.packets_received,
+           stats.packets_discarded);
+    printf("    octets sent/received: %" PRIu32 "/%" PRIu32 "\n",
+           stats.bytes_sent,
+           stats.bytes_received);
+}
 
-    return 0;
+int main(void)
+{
+    int failures = 0;
+
+    failures += example_spw_packets();
+    failures += example_packet_transfer();
+    failures += example_routing();
+    example_statistics();
+
+    printf("%s\n", (failures == 0) ? "Example completed." : "Example FAILED.");
+
+    return (failures == 0) ? 0 : 1;
 }
