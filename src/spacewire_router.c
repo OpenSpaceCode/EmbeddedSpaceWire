@@ -53,7 +53,8 @@ sw_result_t sw_router_add_route(sw_router_t *router,
         return SW_WRONG_ADDRESS;
     }
 
-    if (output_port >= router->num_ports)
+    /* The configuration port is reached by path addressing only (clause 5.6.8.3 f). */
+    if ((output_port == SW_PORT_CONFIG) || (output_port >= router->num_ports))
     {
         return SW_WRONG_PORT;
     }
@@ -86,7 +87,8 @@ static sw_route_result_t sw_router_invalid_address(sw_router_t *router)
  * (clause 5.6.8.3, Table 5-11). A logical address is looked up in the routing
  * table (clause 5.6.8.4). An address that is unconfigured, which includes the
  * reserved address 255, or that leads to a port the router does not have, is
- * invalid (clause 5.6.8.5).
+ * invalid (clause 5.6.8.5). So is a logical address that leads to the
+ * configuration port, which is reached by path addressing only (clause 5.6.8.3 f).
  *
  * @param[in]  router Router to consult.
  * @param[in]  lead   Leading address character of the packet.
@@ -96,8 +98,9 @@ static sw_route_result_t sw_router_invalid_address(sw_router_t *router)
 static int sw_router_resolve(const sw_router_t *router, uint8_t lead, sw_route_entry_t *route)
 {
     sw_route_entry_t candidate;
+    const int is_logical = (lead > SW_PATH_ADDR_MAX);
 
-    if (lead <= SW_PATH_ADDR_MAX)
+    if (!is_logical)
     {
         candidate.output_port = lead;
         candidate.configured = 1;
@@ -108,7 +111,10 @@ static int sw_router_resolve(const sw_router_t *router, uint8_t lead, sw_route_e
         candidate = router->routes[lead];
     }
 
-    if ((!candidate.configured) || (candidate.output_port >= router->num_ports))
+    /* sw_router_add_route() refuses a logical route to the configuration port, but the
+     * table is caller-visible, so an entry written into it directly is refused here. */
+    if ((!candidate.configured) || (candidate.output_port >= router->num_ports) ||
+        ((is_logical) && (candidate.output_port == SW_PORT_CONFIG)))
     {
         return 0;
     }

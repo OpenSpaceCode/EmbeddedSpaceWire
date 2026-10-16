@@ -77,7 +77,7 @@ typedef enum
  */
 typedef struct
 {
-    uint8_t output_port; /**< Port the packet is forwarded through. */
+    uint8_t output_port; /**< Port the packet is forwarded through; never ::SW_PORT_CONFIG. */
     uint8_t configured;  /**< 1 if this logical address has a valid route. */
     uint8_t delete_addr; /**< 1 to delete the logical address before forwarding (clause 5.6.8.6). */
 } sw_route_entry_t;
@@ -148,12 +148,15 @@ void sw_router_init(sw_router_t *router, uint8_t num_ports);
  *
  * @param[in,out] router       Target router.
  * @param[in]     logical_addr Logical address to route; must be 32..254.
- * @param[in]     output_port  Existing output port to forward through.
+ * @param[in]     output_port  Existing external output port to forward through
+ *                             (1..num_ports - 1).
  * @param[in]     delete_addr  Non-zero to delete the logical address before
  *                             forwarding (logical-address deletion, clause 5.6.8.6).
  * @return ::SW_OK on success, ::SW_INVALID_PARAM if @p router is NULL,
  *         ::SW_WRONG_ADDRESS if @p logical_addr is outside 32..254, or
- *         ::SW_WRONG_PORT if the router has no port @p output_port.
+ *         ::SW_WRONG_PORT if @p output_port is the configuration port, which is
+ *         reached by path addressing only (clause 5.6.8.3 f), or a port the
+ *         router does not have.
  */
 sw_result_t sw_router_add_route(sw_router_t *router,
                                 uint8_t logical_addr,
@@ -177,9 +180,9 @@ sw_result_t sw_router_add_route(sw_router_t *router,
  * @param[out]    delete_leading 1 if the leading character must be removed before
  *                               forwarding, else 0.
  * @return ::SW_ROUTE_OK to forward, or ::SW_ROUTE_DISCARD to drop the packet
- *         (NULL args, empty packet, non-existent port or unconfigured address).
- *         The last two also bump the router's invalid-address counter
- *         (clause 5.6.8.5).
+ *         (NULL args, empty packet, non-existent port, unconfigured address, or a
+ *         logical address routed to the configuration port). The last three also
+ *         bump the router's invalid-address counter (clauses 5.6.8.3 f, 5.6.8.5).
  */
 sw_route_result_t sw_router_route(sw_router_t *router,
                                   const uint8_t *packet,

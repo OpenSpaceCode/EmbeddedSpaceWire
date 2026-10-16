@@ -180,6 +180,33 @@ static int test_router_logical_route_stale_port(void)
     return 0;
 }
 
+/* A logical address never reaches the configuration port (clause 5.6.8.3 f), even
+ * through an entry written into the table directly; path address 0 still does. */
+static int test_router_logical_route_to_config_port(void)
+{
+    sw_router_t router;
+    sw_router_init(&router, 4); /* ports 0..3 */
+
+    router.routes[0x40].configured = 1;
+    router.routes[0x40].output_port = SW_PORT_CONFIG;
+    router.routes[0x40].delete_addr = 0;
+
+    uint8_t port = 0xEE;
+    uint8_t del = 0xEE;
+    const uint8_t logical[2] = {0x40, 0x99};
+    ASSERT_EQ_INT(SW_ROUTE_DISCARD,
+                  sw_router_route(&router, logical, sizeof(logical), &port, &del));
+    ASSERT_EQ_INT(1, (int)router.invalid_address_errors);
+    ASSERT_EQ_INT(0xEE, port);
+    ASSERT_EQ_INT(0xEE, del);
+
+    const uint8_t path[2] = {SW_PORT_CONFIG, 0x99};
+    ASSERT_EQ_INT(SW_ROUTE_OK, sw_router_route(&router, path, sizeof(path), &port, &del));
+    ASSERT_EQ_INT(SW_PORT_CONFIG, port);
+    ASSERT_EQ_INT(1, del);
+    return 0;
+}
+
 static int test_router_add_route_validation(void)
 {
     sw_router_t router;
@@ -193,9 +220,11 @@ static int test_router_add_route_validation(void)
     ASSERT_EQ_INT(SW_WRONG_ADDRESS, sw_router_add_route(&router, 0xFF, 1, 0));
     /* Output port must exist. */
     ASSERT_EQ_INT(SW_WRONG_PORT, sw_router_add_route(&router, 0x40, 4, 0));
-    /* Boundaries: lowest logical address and highest valid port. */
+    /* The configuration port is reached by path addressing only (clause 5.6.8.3 f). */
+    ASSERT_EQ_INT(SW_WRONG_PORT, sw_router_add_route(&router, 0x40, SW_PORT_CONFIG, 0));
+    /* Boundaries: lowest and highest logical address, lowest and highest external port. */
     ASSERT_EQ_INT(SW_OK, sw_router_add_route(&router, 0x20, 3, 0));
-    ASSERT_EQ_INT(SW_OK, sw_router_add_route(&router, 0xFE, 0, 0));
+    ASSERT_EQ_INT(SW_OK, sw_router_add_route(&router, 0xFE, 1, 0));
     return 0;
 }
 
@@ -256,8 +285,10 @@ static int test_router_add_route_failure_leaves_table_unchanged(void)
     sw_router_init(&router, 4); /* ports 0..3 */
     ASSERT_EQ_INT(SW_OK, sw_router_add_route(&router, 0x40, 2, 1));
 
-    /* Overwriting an existing route with a port that does not exist. */
+    /* Overwriting an existing route with a port that does not exist, or with the
+     * configuration port. */
     ASSERT_EQ_INT(SW_WRONG_PORT, sw_router_add_route(&router, 0x40, 4, 0));
+    ASSERT_EQ_INT(SW_WRONG_PORT, sw_router_add_route(&router, 0x40, SW_PORT_CONFIG, 0));
     ASSERT_EQ_INT(2, router.routes[0x40].output_port);
     ASSERT_EQ_INT(1, router.routes[0x40].configured);
     ASSERT_EQ_INT(1, router.routes[0x40].delete_addr);
@@ -279,6 +310,7 @@ test_result_t test_spacewire_router_run_all(void)
     RUN_TEST(test_router_path_logical_boundary);
     RUN_TEST(test_router_logical_addressing);
     RUN_TEST(test_router_logical_route_stale_port);
+    RUN_TEST(test_router_logical_route_to_config_port);
     RUN_TEST(test_router_add_route_validation);
     RUN_TEST(test_router_route_invalid_args_and_empty);
     RUN_TEST(test_router_route_discard_leaves_outputs_unchanged);
