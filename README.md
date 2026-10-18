@@ -7,17 +7,19 @@ Minimal, embedded-optimized implementation of the **SpaceWire** packet and netwo
 - **ECSS-E-ST-50-12C** Rev.1: SpaceWire — links, nodes, routers and networks
 - **ECSS-E-ST-50-53C**: SpaceWire — CCSDS packet transfer protocol
 - **ECSS-E-ST-50-51C**: SpaceWire — protocol identification (Protocol ID `0x02`)
-- **CCSDS 133.0-B-2**: Space Packet Protocol
+- **CCSDS 133.0-B-2**: Space Packet Protocol — the packet being carried; supplied by
+  the application through the payload adapter, not implemented here
 
 ## Features
 
 ### Core Protocol Implementation
 
 - **Network layer**: SpaceWire packets and routing — path (0–31) and logical
-  (32–254) addressing with header deletion (ECSS-E-ST-50-12C §5.6)
-- **CCSDS Packet Transfer Protocol**: encapsulation/extraction of CCSDS Space
-  Packets with EOP/EEP receive status (ECSS-E-ST-50-53C)
-- **CCSDS Integration**: built on the EmbeddedSpacePacket library
+  (32–254) addressing with header deletion (ECSS-E-ST-50-12C §5.6.8)
+- **CCSDS Packet Transfer Protocol**: encapsulation/extraction of the carried
+  packet with EOP/EEP receive status (ECSS-E-ST-50-53C)
+- **Payload adapter**: the carried packet is reached through three overridable
+  hooks, so the application plugs in its own Space Packet implementation
 
 ### Scope (hardware boundary)
 
@@ -31,8 +33,9 @@ library as out-of-band metadata, not as bytes within packet buffers.
 
 - **Minimal footprint**: small static library, no dynamic allocation
 - **Zero allocation**: stack- and caller-owned buffers only
-- **Embedded-optimized**: no external dependencies except EmbeddedSpacePacket
-- **Portable**: pure C99, big-endian network byte order
+- **Standalone**: no external dependencies
+- **Portable**: C99; the only compiler-specific item is the weak-symbol
+  attribute behind `SW_WEAK` (GNU-compatible by default, overridable)
 - **Standards-driven**: no non-standard framing or checksums on the wire
 
 ## Project Structure
@@ -40,38 +43,60 @@ library as out-of-band metadata, not as bytes within packet buffers.
 ```
 EmbeddedSpaceWire/
 ├── include/
-│   ├── spacewire.h          # SpaceWire packet + network (routing) layer
-│   └── spacewire_packet.h   # CCSDS packet transfer protocol (ECSS-E-ST-50-53C)
+│   ├── spacewire.h              # SpaceWire packet + network (routing) layer
+│   ├── spacewire_ptp.h          # CCSDS packet transfer protocol (ECSS-E-ST-50-53C)
+│   └── spacewire_payload.h      # Payload adapter hooks
 ├── src/
-│   ├── spacewire_frame.c    # SpaceWire packet builder
-│   ├── spacewire_router.c   # Routing switch + link state
-│   └── spacewire_packet.c   # CCSDS packet transfer protocol
-├── external/
-│   └── EmbeddedSpacePacket/ # CCSDS Space Packet library (submodule)
+│   ├── spacewire_spw_packet.c   # SpaceWire packet builder
+│   ├── spacewire_router.c       # Routing decision (address decoding, routing table)
+│   ├── spacewire_ptp.c          # CCSDS packet transfer protocol
+│   └── weak/
+│       └── spacewire_payload.c  # Default (raw-octet) payload hooks, replaceable
+├── docs/
+│   └── space_packet_integration.md  # Carrying CCSDS Space Packets
 ├── examples/
-│   └── main.c               # End-to-end usage
+│   └── main.c                   # End-to-end usage
 ├── tests/
-│   ├── cunit.h              # Tiny C test helpers
-│   ├── test_frame.c         # Packet-builder tests
-│   ├── test_router.c        # Routing + link tests
-│   ├── test_packet.c        # CCSDS PTP tests (+ golden wire vector)
-│   └── unit_tests.c         # Test runner
+│   ├── cunit.h                  # Tiny C test helpers
+│   ├── test_runners.h           # Suite runner declarations
+│   ├── test_spw_packet.c        # Packet-builder tests
+│   ├── test_router.c            # Routing tests
+│   ├── test_ptp.c               # CCSDS PTP tests (+ golden wire vector)
+│   ├── test_payload.c           # Default payload hook tests
+│   ├── test_payload_override.c  # Overridden payload hooks (own binary)
+│   └── unit_tests.c             # Test runner
 ├── tools/
-│   └── coverage_html.sh     # HTML coverage generator
+│   └── coverage_html.sh         # HTML coverage report + 100% gate
+├── .github/workflows/
+│   └── ci.yml                   # CI: tests, coverage, sanitizers, format
+├── .clang-format                # Code style
 ├── Makefile
 └── README.md
 ```
 
 ## Building
 
-### Prerequisites
+### Requirements
 
-This repository vendors the CCSDS Space Packet library as a git submodule.
-After cloning, initialise it:
+- A C99 compiler. The build must be warning-free under both **gcc** and
+  **clang**; CI checks both.
+- `make` and `ar`
+- Optional: `gcovr` for coverage, `clang-format` for the format check
+
+Pick the compiler with `CC`:
 
 ```bash
-git submodule update --init --recursive
+make CC=gcc
+make CC=clang
 ```
+
+The Makefile builds with `-Werror` and a strict warning set (`-Wall -Wextra
+-Wpedantic -Wconversion -Wshadow` and others), so any warning fails the build.
+`OPT` sets the optimisation flags (default `-O2`), e.g. `make OPT="-O0 -g"`.
+
+Do not set `CFLAGS` on the command line or in the environment: it replaces the
+Makefile's whole flag set, including the include path, `-std=c99`, `-Werror` and
+the warnings. Use `OPT` for optimisation or instrumentation flags instead.
 
 ### Build Everything
 
@@ -99,7 +124,22 @@ make example
 make test
 ```
 
-Test binary path: `build/bin/spacewire_tests`.
+Two binaries are built and run: `build/bin/spacewire_tests` uses the default
+payload hooks, and `build/bin/spacewire_override_tests` replaces them with its
+own.
+
+### Sanitizers
+
+```bash
+make sanitize
+make sanitize CC=clang
+```
+
+Rebuilds the library, both test binaries and the example with AddressSanitizer
+and UndefinedBehaviorSanitizer (leak detection on, every report fatal), runs
+them, and prints one result line per binary. Program output is shown only on
+failure. The instrumented build goes to `build/sanitize/` and is removed
+afterwards.
 
 ### Coverage (HTML)
 
@@ -107,7 +147,36 @@ Test binary path: `build/bin/spacewire_tests`.
 make coverage-html
 ```
 
-Coverage report is generated at `build/coverage/index.html`.
+Requires `gcovr`. Runs `make clean` first, so any existing `build/` output is
+removed. It then builds instrumented tests in `build/coverage-build/`, runs
+both test binaries, and writes the report to `build/coverage/index.html`.
+Coverage of `src/` must be **100% line and 100% branch**; below that the
+command still writes the report, then exits non-zero.
+
+### Formatting
+
+Code style is defined in [.clang-format](.clang-format). Check every C file
+with:
+
+```bash
+git ls-files '*.c' '*.h' | xargs clang-format --dry-run --Werror
+```
+
+Drop `--dry-run --Werror` and add `-i` to reformat in place.
+
+### Continuous Integration
+
+[.github/workflows/ci.yml](.github/workflows/ci.yml) runs on every push to
+`main` and on every pull request:
+
+| Job | What it checks |
+|---|---|
+| Unit tests | `make` with gcc and with clang: libraries, both test binaries, example |
+| Coverage | `make coverage-html`; fails below 100% line or branch; report uploaded as an artifact |
+| Sanitizers | `make sanitize` with gcc and with clang |
+| clang-format | Every tracked `.c` and `.h` file matches `.clang-format` |
+
+Run the same checks locally before pushing.
 
 ### Clean
 
@@ -120,23 +189,59 @@ make distclean  # Deep clean including object files
 
 See [examples/main.c](examples/main.c).
 
+## Payload Adapter
+
+The packet transfer layer never looks inside the packet it carries. It sizes,
+serialises and parses it through three hooks declared in
+[include/spacewire_payload.h](include/spacewire_payload.h):
+
+| Hook | Purpose |
+|---|---|
+| `sw_payload_size()` | Serialised size of a payload object |
+| `sw_payload_serialize()` | Write a payload object into the output buffer |
+| `sw_payload_parse()` | Fill a payload object from a received buffer |
+
+The library ships weak default hooks in `src/weak/` that treat the payload as
+raw octets (`sw_payload_raw_t`), so it works on its own. To carry a structured
+protocol, define the same three functions in the application; they replace the
+defaults at link time. An application that compiles the library sources itself
+and overrides all three hooks can leave `src/weak/` out of its build.
+
+The overrides must be linked as an object file. Overrides that exist only
+inside a static library are silently ignored by the linker.
+
+Because the hooks are resolved at link time, **one program carries one payload
+type**: every `sw_ptp_encode()` and `sw_ptp_decode()` call in it uses the same
+three hooks. Carrying two different protocols in one image would need the
+application to dispatch on its own payload object inside the hooks.
+
+[docs/space_packet_integration.md](docs/space_packet_integration.md) shows the
+overrides for CCSDS Space Packets using EmbeddedSpacePacket.
 
 ## Memory Usage
 
-- **Library code**: ~3 KB (`.text`); no dynamic allocation, all buffers caller-owned
-- **`sw_packet_frame_t`**: 40 bytes (CCSDS PTP packet state)
-- **`sw_router_t`**: ~1.4 KB — a 256-entry routing table (3 B/entry) plus per-port
-  link state; set `-DSW_NUM_PORTS=n` to shrink the per-router footprint
+Figures for x86-64, gcc `-O2`:
+
+- **Library code**: ~2.3 KB (`.text`, default payload hooks included); no dynamic
+  allocation, all buffers caller-owned
+- **Static data**: 20 bytes (`.bss`), the CCSDS PTP statistics block
+- **`sw_ptp_frame_t`**: 16 bytes (CCSDS PTP addressing fields)
+- **`sw_router_t`**: 784 bytes — a 256-entry routing table (3 B/entry) plus
+  counters
 
 ## Thread Safety
 
-Packet, routing and link operations work entirely on caller-owned state passed
+Packet and routing operations work entirely on caller-owned state passed
 by pointer and take no internal locks, so independent objects can be used from
 independent tasks. The one shared item is the library's statistics block:
-`sw_packet_encode` and `sw_packet_decode` update a process-global counter (read
-via `sw_get_statistics`, cleared via `sw_reset_statistics`), which is **not**
+`sw_ptp_encode` and `sw_ptp_decode` update a process-global counter (read
+via `sw_ptp_get_statistics`, cleared via `sw_ptp_reset_statistics`), which is **not**
 thread-safe. In a multi-task system, serialise the encode/decode/statistics
 calls or confine them to a single task.
+
+The same block is shared by every link: a node with more than one SpaceWire link,
+such as a nominal and a redundant one, cannot read per-link figures from it and
+has to count per link itself.
 
 ## Limitations and Extensions
 
@@ -144,8 +249,16 @@ The library implements the packet and network layers; the following are out of
 scope or not yet implemented:
 
 - Character/signal and data-link levels — provided by the SpaceWire hardware CODEC
-- Time-codes, broadcast codes and distributed interrupts (ECSS-E-ST-50-12C §5.6)
-- Group adaptive routing (one output port per logical address)
+- Building and validating the carried CCSDS Space Packet — provided by the
+  application through the payload adapter
+- Time-codes, broadcast codes and distributed interrupts (ECSS-E-ST-50-12C §5.6.3–5.6.5)
+- Packet forwarding: the router makes the routing decision (output port, and
+  whether to delete the leading address); moving the packet is left to the
+  caller or the hardware. Wormhole routing and arbitration (§5.6.8.7–5.6.8.8)
+  are therefore out of scope
+- Group adaptive routing (§5.6.8.9): one output port per logical address
+- Packet multicast (§5.6.8.10)
+- Routing switch reset and port time-out (§5.6.8.11–5.6.8.12)
 - Guaranteed delivery — per ECSS-E-ST-50-53C the service is unconfirmed and
   incomplete (no acknowledgement, retransmission or QoS)
 
