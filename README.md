@@ -34,7 +34,8 @@ library as out-of-band metadata, not as bytes within packet buffers.
 - **Minimal footprint**: small static library, no dynamic allocation
 - **Zero allocation**: stack- and caller-owned buffers only
 - **Standalone**: no external dependencies
-- **Portable**: pure C99, big-endian network byte order
+- **Portable**: C99; the only compiler-specific item is the weak-symbol
+  attribute behind `SW_WEAK` (GNU-compatible by default, overridable)
 - **Standards-driven**: no non-standard framing or checksums on the wire
 
 ## Project Structure
@@ -47,7 +48,7 @@ EmbeddedSpaceWire/
 │   └── spacewire_payload.h      # Payload adapter hooks
 ├── src/
 │   ├── spacewire_spw_packet.c   # SpaceWire packet builder
-│   ├── spacewire_router.c       # Routing switch
+│   ├── spacewire_router.c       # Routing decision (address decoding, routing table)
 │   ├── spacewire_ptp.c          # CCSDS packet transfer protocol
 │   └── weak/
 │       └── spacewire_payload.c  # Default (raw-octet) payload hooks, replaceable
@@ -92,6 +93,10 @@ make CC=clang
 The Makefile builds with `-Werror` and a strict warning set (`-Wall -Wextra
 -Wpedantic -Wconversion -Wshadow` and others), so any warning fails the build.
 `OPT` sets the optimisation flags (default `-O2`), e.g. `make OPT="-O0 -g"`.
+
+Do not set `CFLAGS` on the command line or in the environment: it replaces the
+Makefile's whole flag set, including the include path, `-std=c99`, `-Werror` and
+the warnings. Use `OPT` for optimisation or instrumentation flags instead.
 
 ### Build Everything
 
@@ -205,14 +210,21 @@ and overrides all three hooks can leave `src/weak/` out of its build.
 The overrides must be linked as an object file. Overrides that exist only
 inside a static library are silently ignored by the linker.
 
+Because the hooks are resolved at link time, **one program carries one payload
+type**: every `sw_ptp_encode()` and `sw_ptp_decode()` call in it uses the same
+three hooks. Carrying two different protocols in one image would need the
+application to dispatch on its own payload object inside the hooks.
+
 [docs/space_packet_integration.md](docs/space_packet_integration.md) shows the
 overrides for CCSDS Space Packets using EmbeddedSpacePacket.
 
 ## Memory Usage
 
-Figures for x86-64:
+Figures for x86-64, gcc `-O2`:
 
-- **Library code**: ~2.2 KB (`.text`); no dynamic allocation, all buffers caller-owned
+- **Library code**: ~2.3 KB (`.text`, default payload hooks included); no dynamic
+  allocation, all buffers caller-owned
+- **Static data**: 20 bytes (`.bss`), the CCSDS PTP statistics block
 - **`sw_ptp_frame_t`**: 16 bytes (CCSDS PTP addressing fields)
 - **`sw_router_t`**: 784 bytes — a 256-entry routing table (3 B/entry) plus
   counters
@@ -227,6 +239,10 @@ via `sw_ptp_get_statistics`, cleared via `sw_ptp_reset_statistics`), which is **
 thread-safe. In a multi-task system, serialise the encode/decode/statistics
 calls or confine them to a single task.
 
+The same block is shared by every link: a node with more than one SpaceWire link,
+such as a nominal and a redundant one, cannot read per-link figures from it and
+has to count per link itself.
+
 ## Limitations and Extensions
 
 The library implements the packet and network layers; the following are out of
@@ -236,7 +252,13 @@ scope or not yet implemented:
 - Building and validating the carried CCSDS Space Packet — provided by the
   application through the payload adapter
 - Time-codes, broadcast codes and distributed interrupts (ECSS-E-ST-50-12C §5.6.3–5.6.5)
-- Group adaptive routing (one output port per logical address)
+- Packet forwarding: the router makes the routing decision (output port, and
+  whether to delete the leading address); moving the packet is left to the
+  caller or the hardware. Wormhole routing and arbitration (§5.6.8.7–5.6.8.8)
+  are therefore out of scope
+- Group adaptive routing (§5.6.8.9): one output port per logical address
+- Packet multicast (§5.6.8.10)
+- Routing switch reset and port time-out (§5.6.8.11–5.6.8.12)
 - Guaranteed delivery — per ECSS-E-ST-50-53C the service is unconfirmed and
   incomplete (no acknowledgement, retransmission or QoS)
 
