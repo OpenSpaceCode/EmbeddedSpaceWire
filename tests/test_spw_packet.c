@@ -111,6 +111,45 @@ static int test_spw_packet_build_single_octet(void)
     return 0;
 }
 
+/* Boundary: one-octet parts, alone and together. */
+static int test_spw_packet_build_one_octet_parts(void)
+{
+    const uint8_t dest[1] = {0x40};
+    const uint8_t cargo[1] = {0xAA};
+    const uint8_t both[2] = {0x40, 0xAA};
+
+    ASSERT_EQ_INT(0, build_exact(NULL, 0, cargo, sizeof(cargo), cargo, sizeof(cargo)));
+    ASSERT_EQ_INT(0, build_exact(dest, sizeof(dest), cargo, sizeof(cargo), both, sizeof(both)));
+    return 0;
+}
+
+/* Corner: a buffer larger than the packet; octets past the packet are not written. */
+static int test_spw_packet_build_larger_buffer(void)
+{
+    const uint8_t dest[1] = {0x40};
+    const uint8_t cargo[2] = {0x11, 0x22};
+    const uint8_t expected[8] = {0x40, 0x11, 0x22, FILL, FILL, FILL, FILL, FILL};
+    uint8_t buf[8];
+    size_t n = 0;
+    memset(buf, FILL, sizeof(buf));
+
+    ASSERT_EQ_INT(SW_OK, sw_spw_packet_build(dest, 1, cargo, 2, buf, sizeof(buf), &n));
+    ASSERT_EQ_UINT(3, n);
+    ASSERT_EQ_MEM(buf, expected, sizeof(expected));
+    return 0;
+}
+
+/* Corner: a valid pointer with a zero length contributes nothing. */
+static int test_spw_packet_build_pointer_with_zero_length(void)
+{
+    const uint8_t dest[2] = {0x40, 0x41};
+    const uint8_t cargo[2] = {0x11, 0x22};
+
+    ASSERT_EQ_INT(0, build_exact(dest, 0, cargo, sizeof(cargo), cargo, sizeof(cargo)));
+    ASSERT_EQ_INT(0, build_exact(dest, sizeof(dest), cargo, 0, dest, sizeof(dest)));
+    return 0;
+}
+
 /* One octet short of the packet: rejected, and the heap buffer is left untouched. */
 static int test_spw_packet_build_one_short(void)
 {
@@ -196,6 +235,9 @@ static int test_spw_packet_build_errors(void)
     /* A part with a non-zero length but no octets. */
     ASSERT_EQ_INT(SW_INVALID_PARAM, sw_spw_packet_build(NULL, 1, cargo, 2, buf, sizeof(buf), &n));
     ASSERT_EQ_INT(SW_INVALID_PARAM, sw_spw_packet_build(dest, 1, NULL, 2, buf, sizeof(buf), &n));
+    /* Boundary: the smallest such length, 1. */
+    ASSERT_EQ_INT(SW_INVALID_PARAM, sw_spw_packet_build(NULL, 1, cargo, 1, buf, sizeof(buf), &n));
+    ASSERT_EQ_INT(SW_INVALID_PARAM, sw_spw_packet_build(dest, 1, NULL, 1, buf, sizeof(buf), &n));
     /* A packet carries at least one data character (clause 5.6.2.1). */
     ASSERT_EQ_INT(SW_WRONG_LENGTH, sw_spw_packet_build(NULL, 0, NULL, 0, buf, sizeof(buf), &n));
     /* Total length exceeds the buffer (1 + 2 > 2). */
@@ -230,6 +272,9 @@ test_result_t test_spacewire_spw_packet_run_all(void)
     RUN_TEST(test_spw_packet_build_cargo_only);
     RUN_TEST(test_spw_packet_build_dest_only);
     RUN_TEST(test_spw_packet_build_single_octet);
+    RUN_TEST(test_spw_packet_build_one_octet_parts);
+    RUN_TEST(test_spw_packet_build_larger_buffer);
+    RUN_TEST(test_spw_packet_build_pointer_with_zero_length);
     RUN_TEST(test_spw_packet_build_one_short);
     RUN_TEST(test_spw_packet_build_length_overflow_rejected);
     RUN_TEST(test_spw_packet_build_dest_longer_than_buffer);

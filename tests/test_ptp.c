@@ -407,6 +407,8 @@ static int test_ptp_encode_invalid_path_unchanged(void)
 
     pf.path = NULL; /* path_len set but no path */
     ASSERT_EQ_INT(SW_INVALID_PARAM, sw_ptp_encode(&pf, &sample_payload, wire, sizeof(wire), &n));
+    pf.path_len = 1; /* the smallest announced address without octets */
+    ASSERT_EQ_INT(SW_INVALID_PARAM, sw_ptp_encode(&pf, &sample_payload, wire, sizeof(wire), &n));
     ASSERT_TRUE(is_untouched(wire, sizeof(wire)));
     ASSERT_EQ_UINT(UINT32_MAX, n);
     return 0;
@@ -444,6 +446,52 @@ static int test_ptp_encode_payload_length_bounds(void)
     ASSERT_EQ_UINT(SW_PTP_HEADER_LEN + SW_PTP_CCSDS_MIN_LEN, n);
     ASSERT_EQ_INT(SW_OK, encode_payload_of(SW_PTP_CCSDS_MAX_LEN, &n));
     ASSERT_EQ_UINT(SW_PTP_HEADER_LEN + SW_PTP_CCSDS_MAX_LEN, n);
+    return 0;
+}
+
+/* Corner: the largest packet a frame can describe, a 255-octet Target SpaceWire Address
+ * and a 65542-octet carried packet, fits an exact-size buffer and not one octet less. */
+static int test_ptp_encode_largest_packet(void)
+{
+    static const uint8_t path[UINT8_MAX] = {0};
+    const uint32_t wire_len = UINT8_MAX + SW_PTP_HEADER_LEN + SW_PTP_CCSDS_MAX_LEN;
+    uint8_t *data = (uint8_t *)calloc(SW_PTP_CCSDS_MAX_LEN, 1);
+    uint8_t *wire = (uint8_t *)malloc(wire_len);
+    if ((!data) || (!wire))
+    {
+        free(data);
+        free(wire);
+        return 1;
+    }
+
+    const sw_payload_raw_t payload = {.data = data, .len = SW_PTP_CCSDS_MAX_LEN};
+    sw_ptp_frame_t pf = sample_frame;
+    pf.path = path;
+    pf.path_len = UINT8_MAX;
+    uint32_t n = UINT32_MAX;
+    const sw_status_t short_result = sw_ptp_encode(&pf, &payload, wire, wire_len - 1u, &n);
+    const uint32_t n_after_short = n;
+    const sw_status_t exact_result = sw_ptp_encode(&pf, &payload, wire, wire_len, &n);
+    free(data);
+    free(wire);
+
+    ASSERT_EQ_INT(SW_BUFFER_TOO_SMALL, short_result);
+    ASSERT_EQ_UINT(UINT32_MAX, n_after_short);
+    ASSERT_EQ_INT(SW_OK, exact_result);
+    ASSERT_EQ_UINT(wire_len, n);
+    return 0;
+}
+
+/* Corner: a buffer larger than the packet; octets past the packet are not written. */
+static int test_ptp_encode_larger_buffer(void)
+{
+    uint8_t wire[SAMPLE_WIRE_LEN + 3u];
+    uint32_t n = 0;
+    memset(wire, FILL, sizeof(wire));
+
+    ASSERT_EQ_INT(SW_OK, sw_ptp_encode(&sample_frame, &sample_payload, wire, sizeof(wire), &n));
+    ASSERT_EQ_UINT(SAMPLE_WIRE_LEN, n);
+    ASSERT_TRUE(is_untouched(&wire[SAMPLE_WIRE_LEN], 3u));
     return 0;
 }
 
@@ -506,6 +554,57 @@ static int test_ptp_decode_bad_protocol_id(void)
 {
     ASSERT_EQ_INT(0, discard_corrupted(1, 0x01, SW_END_EOP, SW_WRONG_PROTOCOL, FILL));
     ASSERT_EQ_INT(0, discard_corrupted(1, 0x03, SW_END_EOP, SW_WRONG_PROTOCOL, FILL));
+    return 0;
+}
+
+/* Corner: when several faults coincide, the first receive check decides. EEP is checked
+ * first, because nothing in an EEP-terminated packet can be trusted (clause 5.5.4.4). */
+static int test_ptp_decode_fault_precedence(void)
+{
+    uint8_t *wire = alloc_sample_wire();
+    if (!wire)
+    {
+        return 1;
+    }
+    wire[2] = 0x01; /* non-zero Reserved field */
+
+    const int eep_and_reserved =
+        expect_not_delivered(wire, SAMPLE_WIRE_LEN, SW_END_EEP, SW_DISCARDED, SW_PTP_STATUS_EEP);
+    const int eep_and_empty =
+        expect_not_delivered(wire, 0, SW_END_EEP, SW_DISCARDED, SW_PTP_STATUS_EEP);
+    const int unknown_and_short =
+        expect_not_delivered(wire, 1, (sw_end_marker_t)2, SW_INVALID_PARAM, FILL);
+    wire[1] = 0x03; /* and another protocol */
+    const int protocol_and_reserved =
+        expect_not_delivered(wire, SAMPLE_WIRE_LEN, SW_END_EOP, SW_WRONG_PROTOCOL, FILL);
+    free(wire);
+
+    ASSERT_EQ_INT(0, eep_and_reserved);
+    ASSERT_EQ_INT(0, eep_and_empty);
+    ASSERT_EQ_INT(0, unknown_and_short);
+    ASSERT_EQ_INT(0, protocol_and_reserved);
+    return 0;
+}
+
+/* Corner: the receiver applies no range check to the Target Logical Address or the User
+ * Application field (clause 5.5.4 defines none), so even 0x00 and 0xFF are delivered. */
+static int test_ptp_decode_header_values_verbatim(void)
+{
+    static const uint8_t extremes[2] = {0x00, 0xFF};
+
+    for (size_t i = 0; i < sizeof(extremes); i++)
+    {
+        uint8_t wire[SAMPLE_WIRE_LEN] = {0};
+        wire[0] = extremes[i];
+        wire[1] = SW_PTP_PROTOCOL_ID;
+        wire[3] = extremes[i];
+
+        sw_ptp_frame_t pf;
+        sw_payload_raw_t payload;
+        ASSERT_EQ_INT(SW_OK, sw_ptp_decode(&pf, &payload, wire, sizeof(wire), SW_END_EOP, NULL));
+        ASSERT_EQ_INT(extremes[i], pf.logical_addr);
+        ASSERT_EQ_INT(extremes[i], pf.user_app);
+    }
     return 0;
 }
 
@@ -590,6 +689,14 @@ static int test_ptp_create(void)
     ASSERT_TRUE(is_untouched(wire, sizeof(wire)));
     ASSERT_EQ_UINT(UINT32_MAX, n);
 
+    ASSERT_EQ_INT(SW_INVALID_PARAM, sw_ptp_create(0xFE, 0x07, NULL, wire, sizeof(wire), &n));
+    ASSERT_EQ_INT(SW_INVALID_PARAM,
+                  sw_ptp_create(0xFE, 0x07, &sample_payload, NULL, sizeof(wire), &n));
+    ASSERT_EQ_INT(SW_INVALID_PARAM,
+                  sw_ptp_create(0xFE, 0x07, &sample_payload, wire, sizeof(wire), NULL));
+    ASSERT_TRUE(is_untouched(wire, sizeof(wire)));
+    ASSERT_EQ_UINT(UINT32_MAX, n);
+
     ASSERT_EQ_INT(SW_OK, sw_ptp_create(0xFE, 0x07, &sample_payload, wire, sizeof(wire), &n));
     ASSERT_EQ_UINT(SAMPLE_WIRE_LEN, n);
     ASSERT_EQ_INT(0xFE, wire[0]);
@@ -617,6 +724,11 @@ static int test_ptp_statistics(void)
     ASSERT_EQ_INT(SW_OK, sw_ptp_decode(&pf, &payload, wire, sizeof(wire), SW_END_EOP, NULL));
     ASSERT_EQ_INT(SW_DISCARDED, sw_ptp_decode(&pf, &payload, wire, sizeof(wire), SW_END_EEP, NULL));
     ASSERT_EQ_INT(SW_WRONG_LENGTH, sw_ptp_decode(&pf, &payload, wire, 1, SW_END_EOP, NULL));
+    ASSERT_EQ_INT(SW_INVALID_PARAM,
+                  sw_ptp_decode(&pf, &payload, wire, sizeof(wire), (sw_end_marker_t)2, NULL));
+    wire[1] = 0x03;
+    ASSERT_EQ_INT(SW_WRONG_PROTOCOL,
+                  sw_ptp_decode(&pf, &payload, wire, sizeof(wire), SW_END_EOP, NULL));
     /* Invalid arguments are not a received packet, so they are not counted. */
     ASSERT_EQ_INT(SW_INVALID_PARAM,
                   sw_ptp_decode(NULL, &payload, wire, sizeof(wire), SW_END_EOP, NULL));
@@ -626,7 +738,7 @@ static int test_ptp_statistics(void)
     ASSERT_EQ_INT(SAMPLE_WIRE_LEN, stats.bytes_sent);
     ASSERT_EQ_INT(1, stats.packets_received);
     ASSERT_EQ_INT(SAMPLE_WIRE_LEN, stats.bytes_received);
-    ASSERT_EQ_INT(2, stats.packets_discarded);
+    ASSERT_EQ_INT(4, stats.packets_discarded);
 
     sw_ptp_reset_statistics();
     sw_ptp_get_statistics(&stats);
@@ -655,6 +767,16 @@ static int test_ptp_virtual_channel(void)
     ASSERT_EQ_INT(SW_OK, sw_ptp_decode(&out, &payload, wire, sizeof(wire), SW_END_EOP, NULL));
     ASSERT_EQ_INT(0x07, sw_ptp_get_virtual_channel(&out));
 
+    /* The lowest and highest channel numbers survive the round trip. */
+    static const sw_ptp_virtual_channel_t extremes[2] = {0x00, 0xFF};
+    for (size_t i = 0; i < sizeof(extremes); i++)
+    {
+        sw_ptp_set_virtual_channel(&pf, extremes[i]);
+        ASSERT_EQ_INT(SW_OK, sw_ptp_encode(&pf, &sample_payload, wire, sizeof(wire), &n));
+        ASSERT_EQ_INT(SW_OK, sw_ptp_decode(&out, &payload, wire, sizeof(wire), SW_END_EOP, NULL));
+        ASSERT_EQ_INT(extremes[i], sw_ptp_get_virtual_channel(&out));
+    }
+
     sw_ptp_set_virtual_channel(NULL, 0x09); /* no-op, must not crash */
     ASSERT_EQ_INT(0, sw_ptp_get_virtual_channel(NULL));
     return 0;
@@ -672,11 +794,15 @@ test_result_t test_spacewire_ptp_run_all(void)
     RUN_TEST(test_ptp_encode_invalid_path_unchanged);
     RUN_TEST(test_ptp_encode_null_args_unchanged);
     RUN_TEST(test_ptp_encode_payload_length_bounds);
+    RUN_TEST(test_ptp_encode_largest_packet);
+    RUN_TEST(test_ptp_encode_larger_buffer);
     RUN_TEST(test_ptp_encode_buffer_boundary);
     RUN_TEST(test_ptp_decode_eep_discarded);
     RUN_TEST(test_ptp_decode_unknown_end_marker_discarded);
     RUN_TEST(test_ptp_decode_reserved_nonzero);
     RUN_TEST(test_ptp_decode_bad_protocol_id);
+    RUN_TEST(test_ptp_decode_fault_precedence);
+    RUN_TEST(test_ptp_decode_header_values_verbatim);
     RUN_TEST(test_ptp_decode_short_lengths_rejected);
     RUN_TEST(test_ptp_decode_any_payload_length_delivered);
     RUN_TEST(test_ptp_decode_null_args_unchanged);

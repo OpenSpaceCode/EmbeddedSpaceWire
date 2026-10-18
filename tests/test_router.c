@@ -40,6 +40,93 @@ static int test_router_init_port_count_bounds(void)
     ASSERT_EQ_INT(SW_NUM_PORTS, router.num_ports);
     sw_router_init(&router, SW_NUM_PORTS + 1u);
     ASSERT_EQ_INT(SW_NUM_PORTS, router.num_ports);
+    sw_router_init(&router, UINT8_MAX);
+    ASSERT_EQ_INT(SW_NUM_PORTS, router.num_ports);
+    return 0;
+}
+
+/* Corner: initialising a router in use clears its routes and counters. */
+static int test_router_reinit_clears_state(void)
+{
+    sw_router_t router;
+    sw_router_init(&router, 4);
+    uint8_t port = 0xEE;
+    uint8_t del = 0xEE;
+    const uint8_t logical[2] = {0x40, 0x99};
+    const uint8_t missing[2] = {9, 0x99};
+
+    ASSERT_EQ_INT(SW_OK, sw_router_add_route(&router, 0x40, 1, 1));
+    ASSERT_EQ_INT(SW_OK, sw_router_route(&router, logical, sizeof(logical), &port, &del));
+    ASSERT_EQ_INT(SW_WRONG_ADDRESS,
+                  sw_router_route(&router, missing, sizeof(missing), &port, &del));
+
+    sw_router_init(&router, 8);
+    ASSERT_EQ_INT(8, router.num_ports);
+    ASSERT_EQ_INT(0, router.routes[0x40].configured);
+    ASSERT_EQ_INT(0, (int)router.invalid_address_errors);
+    ASSERT_EQ_INT(0, (int)router.packets_routed);
+    ASSERT_EQ_INT(0, (int)router.packets_discarded);
+    ASSERT_EQ_INT(SW_WRONG_ADDRESS,
+                  sw_router_route(&router, logical, sizeof(logical), &port, &del));
+    return 0;
+}
+
+/* Corner: a router with the configuration port only. No logical route can exist,
+ * and only path address 0 is routable. */
+static int test_router_config_port_only(void)
+{
+    sw_router_t router;
+    sw_router_init(&router, 1);
+    uint8_t port = 0xEE;
+    uint8_t del = 0xEE;
+    const uint8_t to_config[1] = {0};
+    const uint8_t to_port_1[1] = {1};
+
+    ASSERT_EQ_INT(SW_WRONG_PORT, sw_router_add_route(&router, 0x40, 1, 0));
+    ASSERT_EQ_INT(SW_WRONG_PORT, sw_router_add_route(&router, 0x40, SW_PORT_CONFIG, 0));
+    ASSERT_EQ_INT(SW_OK, sw_router_route(&router, to_config, sizeof(to_config), &port, &del));
+    ASSERT_EQ_INT(SW_PORT_CONFIG, port);
+    ASSERT_EQ_INT(SW_WRONG_ADDRESS,
+                  sw_router_route(&router, to_port_1, sizeof(to_port_1), &port, &del));
+    return 0;
+}
+
+/* Normal: a route can be replaced; any non-zero delete_addr is stored as 1; the highest
+ * logical address 254 is routable. */
+static int test_router_add_route_overwrite(void)
+{
+    sw_router_t router;
+    sw_router_init(&router, 4);
+    uint8_t port = 0xEE;
+    uint8_t del = 0xEE;
+    const uint8_t highest[2] = {0xFE, 0x99};
+
+    ASSERT_EQ_INT(SW_OK, sw_router_add_route(&router, 0xFE, 1, 0));
+    ASSERT_EQ_INT(SW_OK, sw_router_add_route(&router, 0xFE, 2, 7));
+    ASSERT_EQ_INT(2, router.routes[0xFE].output_port);
+    ASSERT_EQ_INT(1, router.routes[0xFE].delete_addr);
+    ASSERT_EQ_INT(SW_OK, sw_router_route(&router, highest, sizeof(highest), &port, &del));
+    ASSERT_EQ_INT(2, port);
+    ASSERT_EQ_INT(1, del);
+    return 0;
+}
+
+/* Corner: the routing table is public, so a delete flag written into it directly with a
+ * value other than 0 or 1 is still reported as 1. */
+static int test_router_route_normalises_delete_flag(void)
+{
+    sw_router_t router;
+    sw_router_init(&router, 4);
+    router.routes[0x50].configured = 1;
+    router.routes[0x50].output_port = 3;
+    router.routes[0x50].delete_addr = 2;
+
+    uint8_t port = 0xEE;
+    uint8_t del = 0xEE;
+    const uint8_t pkt[2] = {0x50, 0x99};
+    ASSERT_EQ_INT(SW_OK, sw_router_route(&router, pkt, sizeof(pkt), &port, &del));
+    ASSERT_EQ_INT(3, port);
+    ASSERT_EQ_INT(1, del);
     return 0;
 }
 
@@ -304,6 +391,10 @@ test_result_t test_spacewire_router_run_all(void)
 {
     RUN_TEST(test_router_init);
     RUN_TEST(test_router_init_port_count_bounds);
+    RUN_TEST(test_router_reinit_clears_state);
+    RUN_TEST(test_router_config_port_only);
+    RUN_TEST(test_router_add_route_overwrite);
+    RUN_TEST(test_router_route_normalises_delete_flag);
     RUN_TEST(test_router_path_addressing);
     RUN_TEST(test_router_path_port_bounds);
     RUN_TEST(test_router_path_logical_boundary);
